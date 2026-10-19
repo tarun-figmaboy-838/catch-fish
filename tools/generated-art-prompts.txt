@@ -16,3 +16,8 @@ winch.png (current) — replaced on 19 Oct 2026 with the wooden version supplied
 layout (pedestal, drum with crank at the left, curved boom with collars, pulley at the tip) in
 orange wood, gold and blue, with a hanging rope that the game clips out (it draws its own).
 The teal version above was the first take.
+
+rope.png — in use: a seven-twist run (x 530–720, y 170–1012, twist period 120 px) is tiled
+along the lifting rope and the sling (src/winch.js drawRope). rope-connector.png — in use as the shackle the
+net hangs from, registered on the top of its slot at (512, 174), bottom at y 1362 (drawRing).
+See tools/CODEX-HANDOFF.md for the working agreement and open asks.

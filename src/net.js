@@ -313,10 +313,10 @@ class Net {
     // the lifting rope down from the boom's pulley to the ring, and the sling from the ring
     // to the top corners that carries the whole frame: the machine's painted rope, tiled
     drawRope(ctx, pulley, { x: ring.x, y: ring.y + 4 }, 11, this.ropePhase);
-    drawRing(ctx, ring.x, ring.y);
     const knot = { x: ring.x, y: ring.y + RING_DEPTH - 4 };
     drawRope(ctx, knot, corners[0], 7);
     drawRope(ctx, knot, corners[1], 7);
+    drawRing(ctx, ring.x, ring.y);
     ctx.filter = 'none';
 
     if (!wet) {

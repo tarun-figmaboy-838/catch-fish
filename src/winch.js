@@ -15,8 +15,8 @@ const S = 0.35;                        // image pixels to stage pixels, the same
 const FOOT = { x: 170, y: -38 };       // where the pedestal stands on the deck
 const ROPE_REST = 36;                  // rope hanging below the pulley with nothing paid out
 const DRUM_R = IMAGE.coil.ry * S;
-// A clean run of the painted rope beside the mast, tiled along every rope the game draws.
-const ROPE_STRIP = { x: 250, y: 395, w: 40, h: 120 };
+// A dedicated generated braid, sampled between matching twist phases.
+const ROPE_STRIP = { x: 530, y: 170, w: 190, h: 842 };
 
 function at([x, y]) {
   return { x: FOOT.x + (x - IMAGE.foot[0]) * S, y: FOOT.y + (y - IMAGE.foot[1]) * S };
@@ -81,44 +81,34 @@ class Winch {
   }
 }
 
-// The painted rope from `from` to `to`, `width` wide: the strip is tiled along the line, and
+// The generated braid from `from` to `to`, at a constant thickness. Its matched repeat
 // `phase` slides the twists so rope visibly pays out and winds in.
 function drawRope(ctx, from, to, width, phase = 0) {
   const len = Math.hypot(to.x - from.x, to.y - from.y);
   if (len < 1) return;
   const s = ROPE_STRIP;
-  const tile = s.h * (width / s.w);
+  const tile = s.h * (width / 164);
+  const paintedWidth = s.w * (width / 164);
   ctx.save();
   ctx.translate(from.x, from.y);
   ctx.rotate(Math.atan2(to.y - from.y, to.x - from.x) - Math.PI / 2);
   ctx.beginPath();
-  ctx.rect(-width / 2 - 1, 0, width + 2, len);
+  ctx.rect(-paintedWidth / 2, -1, paintedWidth, len + 2);
   ctx.clip();
   const start = ((phase % tile) + tile) % tile - tile;
-  for (let y = start; y < len; y += tile) ctx.drawImage(assets.winchPolished, s.x, s.y, s.w, s.h, -width / 2, y, width, tile + 0.5);
+  for (let y = start; y < len; y += tile) ctx.drawImage(assets.rope, s.x, s.y, s.w, s.h, -paintedWidth / 2, y, paintedWidth, tile + 0.35);
   ctx.restore();
 }
 
 // The lifting ring the net hangs from, registered on its shackle (where the rope ends): brass
 // to match the machine.
-const RING_DEPTH = 26;
+const RING_DEPTH = 34;
 function drawRing(ctx, x, y) {
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.lineWidth = 7;
-  ctx.strokeStyle = '#5a3a14';
-  ctx.beginPath();
-  ctx.ellipse(x, y + 14, 10, 12, 0, 0, TAU);
-  ctx.stroke();
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = '#e2b85c';
-  ctx.stroke();
-  ctx.lineWidth = 1.2;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
-  ctx.beginPath();
-  ctx.ellipse(x, y + 14, 11, 13, 0, Math.PI * 1.15, Math.PI * 1.6);
-  ctx.stroke();
-  ctx.restore();
+  // The socket starts at y, and the ring bottom overlaps both sling ropes. Preserve
+  // the entire generated connector including its antialiased silhouette.
+  const h = 34 * 1536 / 1211;
+  const w = h * 1024 / 1536;
+  ctx.drawImage(assets.ropeConnector, x-w/2, y-156/1536*h, w, h);
 }
 
 Object.assign(PopoGame, { Winch, drawRope, drawRing, RING_DEPTH });

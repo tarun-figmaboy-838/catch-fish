@@ -52,6 +52,7 @@ class Fish {
     this.waitToEnter = 0;
     this.caught = null;    // where it hangs in the net, measured from the net's ring
     this.calm = 0;         // seconds of slowing down because the net is coming
+    this.rare = false;     // the final level's prize fish: a golden shimmer and sparkles
     this.breath = 2 + Math.random() * 4;
     this.pitch = 0;
     this.lastY = y;
@@ -275,10 +276,20 @@ class Fish {
     ctx.save();
     ctx.globalAlpha = this.alpha;
     ctx.translate(this.x, this.y + bob + hop);
+    if (this.rare) {
+      const r = Math.max(this.w, this.h) * 0.7 * this.scale;
+      const glow = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r);
+      glow.addColorStop(0, `rgba(255, 225, 120, ${0.3 + Math.sin(this.bobPhase * 1.4) * 0.12})`);
+      glow.addColorStop(1, 'rgba(255, 225, 120, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, TAU);
+      ctx.fill();
+    }
     ctx.rotate(rot + this.pitch * this.dir);
     ctx.scale(this.dir * this.scale, this.scale);
     const [x0, y0, x1, y1] = this.box;
-    if (this.reduced) {
+    if (this.reduced || this.frozen || this.flying) {
       ctx.drawImage(this.img, x0, y0, x1 - x0, y1 - y0, -this.w / 2, -this.h / 2, this.w, this.h);
     } else {
       // a swimming ripple runs from head to tail: the tail and fins swing, the face barely moves
@@ -310,12 +321,14 @@ function spawnFish(keys, area, sizeScale = 1) {
 }
 
 // A level's school: each fish swims in from the left or right one after another, a little
-// different in size so no two look cloned, then cruises slowly about under the net.
-function spawnSchool(keys, area, sizeScale = 1) {
+// different in size so no two look cloned, then cruises slowly about under the net. The
+// final level's school is rare: golden and a little quicker.
+function spawnSchool(keys, area, rare = false) {
   let at = 0;
   return keys.map((key) => {
-    const fish = new Fish(key, -999, area.top, 1, sizeScale * (0.9 + Math.random() * 0.2));
-    fish.cruise = 24 + Math.random() * 18;
+    const fish = new Fish(key, -999, area.top, 1, 0.9 + Math.random() * 0.2);
+    fish.cruise = (24 + Math.random() * 18) * (rare ? 1.3 : 1);
+    fish.rare = rare;
     fish.swimInAfter(at);
     at += 0.2 + Math.random() * 0.35;
     return fish;

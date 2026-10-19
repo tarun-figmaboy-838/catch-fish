@@ -64,7 +64,7 @@ const LEVELS = [
     hint: 'Check both halves of each diagonal.' },
   { title: 'Final Catch', type: 'parallelogram', metres: { AB: 6 }, corner: 'D',
     width: 400, height: 210, lean: 30, rotate: -7, start: { x: 80, y: -70 },
-    location: 3, fish: 9, hintDelay: 9,
+    location: 3, fish: 9, rare: true, hintDelay: 9,
     prompt: 'Make this net a *parallelogram*.',
     praise: 'You made a parallelogram!',
     hint: 'Think about what you learned: sides, angles, diagonals.' },

@@ -48,7 +48,7 @@ original artwork, voice recordings and tools out of the deployment.
   angle at A), the corner that moves and where it starts, an optional line it moves along (so
   a length or angle level changes only that), the side whose length in metres sets the
   measurement scale, the fish count (3, 4, 4, 5, 5, 6, 7, 9), the prompt, the praise and the
-  hint a wrong Check gives.
+  hint a wrong Check gives. The final level's school is rare: golden, quicker, trailing glints.
 - **Geometry** (`src/geometry.js`, `src/net.js`): plain vector helpers (parallel by the
   normalised cross product, so vertical sides are no trouble; interior angles; the diagonals'
   intersection; area and self-intersection). Corners A, B, C, D in order make a parallelogram
@@ -81,7 +81,8 @@ original artwork, voice recordings and tools out of the deployment.
   net hangs. Popo (`assets/generated/popo-operating.png`, four poses of him turning a
   handwheel, registered on the wheel's shaft so it stays on the drum's axle) changes pose
   with the drum as rope pays out or winds in. Every rope the game draws (the lifting rope,
-  the sling to the net's top corners) is the machine's own painted rope, tiled along the line.
+  the sling to the net's top corners) is one twist of the generated rope (`rope.png`) tiled
+  along the line, and the net hangs from the generated brass shackle (`rope-connector.png`).
 - **The net's look**: the generated net texture (`assets/generated/net.png`, rope frame,
   floats and weights) is warped onto the frame triangle by triangle, cached per shape, so it
   deforms with the puzzle and rides with the raft for free.
@@ -102,8 +103,9 @@ original artwork, voice recordings and tools out of the deployment.
   `ui.js` the HUD and the corner's pointer handling, `levels.js` the level and story data.
 - `asset/` – the untouched source artwork and voice recordings (not deployed).
 - `assets/` – the compressed art the game loads, generated from `asset/`, and
-  `assets/generated/` – Popo, the winch, the net texture and the dialogue panel, generated
-  images used whole (their prompts are in `tools/generated-art-prompts.txt`).
+  `assets/generated/` – Popo's poses, the winch, the rope and shackle, the net texture and
+  the dialogue panel: generated images used whole (prompts in `tools/generated-art-prompts.txt`;
+  the division of work with Codex, which makes them, is in `tools/CODEX-HANDOFF.md`).
 - `tools/build-assets.py` – rebuilds `assets/` and `src/sprite-data.js` (needs Pillow): the
   backgrounds and their water masks, the raft, the title fish and the natural fish (blue and
   teal ones are left out because they vanish against the water).

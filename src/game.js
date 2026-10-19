@@ -200,7 +200,8 @@ class Game {
   }
 
   spawnSchool() {
-    state.fish = spawnSchool(schoolFor(LEVELS[state.level]), this.fishArea);
+    const level = LEVELS[state.level];
+    state.fish = spawnSchool(schoolFor(level), this.fishArea, level.rare);
     this.ambient = refreshShadows(this.ambient, 4, this.area);
   }
 
@@ -921,8 +922,9 @@ class Game {
       if (f.caught) {
         // netted fish hang in the mesh, swaying a touch with the net
         const p = net.toStage(f.caught);
-        f.x = p.x + Math.sin(this.fx.t * 5 + f.caught.x) * 1.5;
+        f.x = p.x;
         f.y = p.y;
+        f.update(dt, this.fishArea, state.fish);
         continue;
       }
       f.update(dt, this.fishArea, state.fish);
@@ -938,6 +940,8 @@ class Game {
       if (f.trail > 0 && Math.random() < dt * 14) {
         this.fx.puff(f.x - f.dir * f.w * 0.45, f.y + (Math.random() - 0.5) * f.h * 0.3, -f.dir * 0.4, 1);
       }
+      // the prize fish leave a glint now and then
+      if (f.rare && Math.random() < dt * 0.6) this.fx.sparkle(f.x - f.dir * f.w * 0.3, f.y + (Math.random() - 0.5) * f.h * 0.5, 1);
     }
     if (this.ambient.some((f) => f.gone)) this.ambient = this.ambient.filter((f) => !f.gone);
     for (const f of this.ambient) f.update(dt, this.area);
@@ -1161,7 +1165,14 @@ class Game {
       popo.draw(ctx);
     }
     // netted fish hop over the deck into the bucket
-    for (const f of state.fish) if (f.flying) f.draw(ctx);
+    for (const f of state.fish) if (f.flying) {
+      ctx.save();
+      if (f.landing) {
+        const mouth = popo.bucketPoint();
+        ctx.beginPath(); ctx.rect(0,0,STAGE_W,mouth.y+4); ctx.clip();
+      }
+      f.draw(ctx); ctx.restore();
+    }
     this.drawRaftWater(ctx);
     this.drawPoof(ctx);
     this.fx.drawFront(ctx);

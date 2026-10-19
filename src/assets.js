@@ -41,10 +41,12 @@ function preloadBackground(index) {
 }
 
 async function loadCoreAssets() {
-  const [popo, operating, winch, net, rowCycle, fish, naturalFish, bg0, props, title, play] = await Promise.all([
+  const [popo, operating, winch, rope, connector, net, rowCycle, fish, naturalFish, bg0, props, title, play] = await Promise.all([
     loadImage('assets/generated/popo.png'),
     loadImage('assets/generated/popo-operating.png'),
     loadImage('assets/generated/winch-arched.png'),
+    loadImage('assets/generated/rope.png'),
+    loadImage('assets/generated/rope-connector.png'),
     loadImage('assets/generated/net.png'),
     loadImage('assets/sprites/popo-row-cycle.webp'),
     loadImage('assets/sprites/fish.webp'),
@@ -57,6 +59,8 @@ async function loadCoreAssets() {
   assets.popoPolished = popo;
   assets.popoOperating = operating;
   assets.winchPolished = winch;
+  assets.rope = rope;
+  assets.ropeConnector = connector;
   assets.netPolished = net;
   assets.rowCycle = rowCycle;
   assets.title = title;

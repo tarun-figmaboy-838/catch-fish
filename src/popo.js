@@ -72,6 +72,7 @@ class Popo {
   setMachine(winch) {
     this.axle = winch.axle;
     this.frame = ((Math.floor(winch.angle / (TAU / 4)) % 4) + 4) % 4;
+    this.operating = winch.working !== 0;
   }
 
   // waveY and waveAngle come from the animated water surface under the raft (see game.js).
@@ -157,7 +158,7 @@ class Popo {
   drawBody(ctx) {
     const o = this.frameOrigin();
     const seat = { x: o.x + CELL.w * S / 2, y: o.y + CELL.h * S };
-    const still = this.reduced;
+    const still = this.reduced || this.operating;
     const breath = still ? 0 : Math.sin(this.bobT * 2) * 0.012;
     let bounce = 0;
     let tilt = 0;
@@ -167,10 +168,10 @@ class Popo {
       else bounce = Math.abs(Math.sin(k * Math.PI * 3)) * 0.05 * (1 - k);
     }
     ctx.save();
-    ctx.translate(seat.x, seat.y);
+    ctx.translate(this.axle.x, this.axle.y);
     ctx.rotate(tilt);
     ctx.scale(1 - breath - bounce * 0.4, 1 + breath + bounce);
-    ctx.translate(-seat.x, -seat.y);
+    ctx.translate(-this.axle.x, -this.axle.y);
     ctx.drawImage(assets.popoOperating, (this.frame % 2) * CELL.w, this.frame > 1 ? CELL.h : 0, CELL.w, CELL.h, o.x, o.y, CELL.w * S, CELL.h * S);
     ctx.restore();
   }

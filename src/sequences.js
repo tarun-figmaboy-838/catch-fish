@@ -316,14 +316,22 @@ async function dropNet(game) {
     await clock.wait(200, token);
 
     const depth = game.catchDepth();
-    const down = reduced ? 1000 : 1500;
+    // Update payout and its dependent geometry together, before splash/capture checks.
+    const payOut = (length) => {
+      winch.setRopeOut(length);
+      net.origin = popo.transformPoint(winch.hang.x, winch.hang.y);
+      net.drop = winch.ropeOut;
+      net.ropePhase = winch.ropeOut;
+    };
+    const smooth = (t) => t*t*t*(t*(t*6-15)+10);
+    const down = reduced ? 1100 : 1800;
     winch.working = 1;
     audio.crank(down / 1000);
     let splashed = false;
     let lastBubble = 0;
     await clock.tween(down, token, (t) => {
-      const k = ease.inOut(t);
-      winch.setRopeOut(depth * k);
+      const k = smooth(t);
+      payOut(depth * k);
       net.swing = reduced ? 0 : Math.sin(t * Math.PI * 2) * 0.012 * (1 - t);
       const bottom = net.ring().y + net.bottom();
       if (!splashed && bottom >= game.waterline) {
@@ -352,12 +360,12 @@ async function dropNet(game) {
     await clock.wait(reduced ? 250 : 420, token);
 
     state.phase = PHASE.NET_RAISING;
-    const up = reduced ? 900 : 1300;
+    const up = reduced ? 1100 : 1800;
     winch.working = -1;
     audio.crank(up / 1000);
     let surfaced = false;
     await clock.tween(up, token, (t) => {
-      winch.setRopeOut(depth * (1 - ease.inOut(t)));
+      payOut(depth * (1 - smooth(t)));
       const bottom = net.ring().y + net.bottom();
       if (!surfaced && bottom < game.waterline) {
         surfaced = true;
@@ -384,24 +392,29 @@ async function dropNet(game) {
   }
 }
 
-// The netted fish hop into the bucket one after another, shrinking as they go.
+// Fish hop from their exact mesh position into the moving bucket, then pass behind
+// its rim. The whole fish remains intact; no instant flip or visible disappearance.
 async function collectFish(game, fish, token) {
   const { popo, fx, audio } = game;
-  const flights = fish.map((f, i) => clock.wait(i * 110, token).then(() => {
+  const flights = fish.map((f, i) => clock.wait(i * 150, token).then(() => {
     const from = { x: f.x, y: f.y };
-    const bucket = popo.bucketPoint();
-    const peak = { x: (from.x + bucket.x) / 2, y: Math.min(from.y, bucket.y) - 170 };
     f.caught = null;
-    f.flying = true; // drawn in front of the raft on its way to the bucket
-    f.dir = -1;
-    return clock.tween(560, token, (t) => {
-      const k = ease.inOut(t);
-      f.x = (1 - k) * (1 - k) * from.x + 2 * (1 - k) * k * peak.x + k * k * bucket.x;
-      f.y = (1 - k) * (1 - k) * from.y + 2 * (1 - k) * k * peak.y + k * k * bucket.y;
-      f.scale = 1 - 0.55 * k;
+    f.flying = true;
+    const duration = Math.max(780, Math.min(1150, Math.abs(from.x-popo.bucketPoint().x)*1.2));
+    return clock.tween(duration, token, (t) => {
+      const bucket = popo.bucketPoint();
+      const k = t*t*(3-2*t);
+      const peak = { x:(from.x+bucket.x)/2, y:Math.min(from.y,bucket.y)-130 };
+      f.x = (1-k)*(1-k)*from.x + 2*(1-k)*k*peak.x + k*k*bucket.x;
+      f.y = (1-k)*(1-k)*from.y + 2*(1-k)*k*peak.y + k*k*(bucket.y+10);
+      f.scale = 1 - 0.65*k;
+      f.landing = t > 0.82;
+      const sink = Math.max(0,(t-0.88)/0.12);
+      f.alpha = 1-sink*sink*(3-2*sink);
     }).then(() => {
       f.gone = true;
-      fx.sparkle(bucket.x, bucket.y - 10, 8);
+      const bucket = popo.bucketPoint();
+      fx.sparkle(bucket.x, bucket.y-10, 8);
       audio.play('collect');
       state.banked += 1;
       game.ui.setCaught(state.banked);
