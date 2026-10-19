@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { FISH_ATLAS, FISH_NATURAL_ATLAS } = PopoGame;
+const { FISH_NATURAL_ATLAS } = PopoGame;
 
 const TITLE = PopoGame.TITLE_DATA || 'assets/backgrounds/title.webp';
 const PLAY = PopoGame.PLAY_DATA || 'assets/sprites/play.webp';
@@ -8,7 +8,6 @@ const BACKGROUNDS = PopoGame.BACKGROUND_DATA || [1, 2, 3, 4].map((n) => `assets/
 
 const assets = {
   backgrounds: [],
-  fish: null,
   naturalFish: null,
 };
 
@@ -41,7 +40,7 @@ function preloadBackground(index) {
 }
 
 async function loadCoreAssets() {
-  const [popo, operating, winch, rope, connector, net, rowCycle, fish, naturalFish, bg0, props, title, play] = await Promise.all([
+  const [popo, operating, winch, rope, connector, net, rowCycle, naturalFish, bg0, props, title, play] = await Promise.all([
     loadImage('assets/generated/popo.png'),
     loadImage('assets/generated/popo-operating.png'),
     loadImage('assets/generated/winch-arched.png'),
@@ -49,7 +48,6 @@ async function loadCoreAssets() {
     loadImage('assets/generated/rope-connector.png'),
     loadImage('assets/generated/net.png'),
     loadImage('assets/sprites/popo-row-cycle.webp'),
-    loadImage('assets/sprites/fish.webp'),
     loadImage('assets/sprites/fish-natural.webp'),
     preloadBackground(0),
     loadImage('assets/sprites/popo-props.webp'),
@@ -66,7 +64,6 @@ async function loadCoreAssets() {
   assets.title = title;
   assets.play = play;
   assets.props = props;
-  assets.fish = { img: fish, boxes: FISH_ATLAS.boxes };
   assets.naturalFish = { img: naturalFish, boxes: FISH_NATURAL_ATLAS.boxes, scale: FISH_NATURAL_ATLAS.scale };
   preloadBackground(1);
   return bg0;

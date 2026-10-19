@@ -103,8 +103,7 @@ original artwork, voice recordings and tools out of the deployment.
 - **Fish** (`src/fish.js`): the natural cartoon fish of `asset/fish-natural-*.png`, drawn in
   vertical strips that ripple head to tail so they visibly swim. A level's school swims in
   from the edges and keeps to the water under the net; as the net comes down they slow and
-  turn back under it; those inside the frame are netted and rise with it. The shape fish of
-  `fish.webp` only circle the play button on the title.
+  turn back under it; those inside the frame are netted and rise with it.
 
 ## Layout
 

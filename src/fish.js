@@ -3,14 +3,12 @@
 const { assets, STAGE_W } = PopoGame;
 
 const TAU = Math.PI * 2;
-const SHAPE_FISH_SCALE = 0.58;
 const STRIPS = 10; // a fish is drawn in vertical strips so its body can ripple as it swims
 
-// The natural fish of the levels, or the shape fish that circle the title's play button.
+// The natural cartoon fish of the levels.
 function fishArt(key) {
   const natural = assets.naturalFish;
-  if (natural && natural.boxes[key]) return { img: natural.img, box: natural.boxes[key], scale: natural.scale };
-  return { img: assets.fish.img, box: assets.fish.boxes[key], scale: SHAPE_FISH_SCALE };
+  return { img: natural.img, box: natural.boxes[key], scale: natural.scale };
 }
 
 class Fish {
@@ -306,20 +304,6 @@ class Fish {
   }
 }
 
-// Fish spread across an area that they keep to (the title's fish).
-function spawnFish(keys, area, sizeScale = 1) {
-  const lanes = keys.length;
-  const span = area.right - area.left;
-  const order = PopoGame.shuffle(keys.map((k, i) => i));
-  const depth = area.bottom - area.top;
-  return keys.map((key, i) => {
-    const slot = order[i];
-    const x = area.left + span * ((slot + 0.5) / lanes) + (Math.random() - 0.5) * span * 0.12;
-    const y = area.top + depth * (0.2 + 0.6 * ((slot * 2 + 1) % lanes) / Math.max(1, lanes - 1)) + (Math.random() - 0.5) * 40;
-    return new Fish(key, x, Math.min(area.bottom - 60, Math.max(area.top + 60, y)), Math.random() < 0.5 ? 1 : -1, sizeScale);
-  });
-}
-
 // A level's school: each fish swims in from the left or right one after another, a little
 // different in size so no two look cloned, then cruises slowly about under the net. The
 // final level's school is rare: golden and a little quicker.
@@ -449,5 +433,5 @@ function refreshShadows(current, count, area) {
   return [...current.filter((s) => s.leaving && !s.gone), ...staying, ...fresh].sort((a, b) => b.depth - a.depth);
 }
 
-Object.assign(PopoGame, { Fish, spawnFish, spawnSchool, refreshShadows });
+Object.assign(PopoGame, { Fish, spawnSchool, refreshShadows });
 })(window.PopoGame = window.PopoGame || {});

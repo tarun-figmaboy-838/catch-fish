@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, spawnFish, spawnSchool, refreshShadows, LOCATIONS, LEVELS, schoolFor, Popo, Winch, Net, TUCK, opening, startLevels, settleCorner, dropNet, Cancelled, STAGE_W, STAGE_H, SCENE_SHIFT, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
+const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, spawnSchool, refreshShadows, LOCATIONS, LEVELS, schoolFor, Popo, Winch, Net, TUCK, opening, startLevels, settleCorner, dropNet, Cancelled, STAGE_W, STAGE_H, SCENE_SHIFT, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
 
 const HINT_REPEAT = 7;    // seconds of idling between hints once one has been shown
 const NET_CLEARANCE = 40; // the net's bottom edge hangs this far above the water
@@ -8,20 +8,12 @@ const SCHOOL_TOP = 55;    // the school keeps this far below the surface
 const SCHOOL_MARGIN = 26; // and this far inside the net's footprint
 const TICK_GAP = 90;      // ms between measurement ticks while dragging
 
-// The title banner: its water surface, sand line, the open water the decorative fish swim
-// in, where the hooked fish splashes, and sparkle points along the logo's snowy edges.
+// The title banner: its water surface, sand line, the play button floating in its water, where
+// the hooked fish splashes, and sparkle points along the logo's snowy edges.
 const TITLE = {
   waterline: 610,
   seabed: 860,
-  area: { left: 60, right: 1612, top: 680, bottom: 905 },
-  // the play button floats in the middle of the banner's water; five shape fish circle it,
-  // and a few more swim back and forth on the far left and right, clear of the orbit
   play: { x: 836, y: 772, r: 112 },
-  orbit: { fish: ['triangle', 'square', 'pentagon', 'hexagon', 'circle'], rx: 270, ry: 92, speed: 0.55 },
-  sides: [
-    { fish: ['rhombus', 'oval'], area: { left: 60, right: 500, top: 690, bottom: 900 } },
-    { fish: ['rectangle', 'semicircle'], area: { left: 1172, right: 1612, top: 690, bottom: 900 } },
-  ],
   splash: { left: 790, right: 980, y: 588 },
   twinkles: [[884, 118], [1092, 86], [1360, 62], [1598, 142], [1588, 300], [962, 334]],
 };
@@ -38,8 +30,7 @@ class Game {
     this.water = new WaterScene(document.getElementById('water'));
     this.titleFx = new Effects();
     this.titleFx.setWaterline(TITLE.waterline);
-    this.titleFish = [];
-    this.playAnim = { hover: 0, hoverTarget: 0, press: 0, burst: 0, angle: 0, bubbleIn: 0.3 };
+    this.playAnim = { hover: 0, hoverTarget: 0, press: 0, burst: 0, bubbleIn: 0.3 };
     this.titleFade = 0;
     this.titleSplashIn = 0.8;
     this.raftRippleIn = 1;
@@ -67,12 +58,6 @@ class Game {
   // --- lifecycle ------------------------------------------------------------
   // The world renders behind the start screen as soon as the art is ready.
   showIdleScene() {
-    if (state.phase === PHASE.TITLE && !this.titleFish.length) {
-      const orbit = spawnFish(TITLE.orbit.fish, TITLE.sides[0].area, 0.46);
-      orbit.forEach((f, i) => { f.orbit = (i / orbit.length) * Math.PI * 2; });
-      const sides = TITLE.sides.flatMap((side) => spawnFish(side.fish, side.area, 0.46).map((f) => Object.assign(f, { zone: side.area })));
-      this.titleFish = [...orbit, ...sides];
-    }
     if (!this.running) {
       this.running = true;
       this.lastFrame = performance.now();
@@ -376,9 +361,6 @@ class Game {
       return;
     }
     this.titleFx.puff(point.x, point.y, 0, 5, true);
-    for (const f of this.titleFish) {
-      if (Math.hypot(f.x - point.x, f.y - point.y) < 320) { f.wiggle(); f.puffs += 2; }
-    }
   }
 
   onPlayHover(on) {
@@ -392,7 +374,7 @@ class Game {
     this.playAnim.press = 1;
   }
 
-  // Play: the button pops, bubbles and sparkles burst out, the fish scatter, the game begins.
+  // Play: the button pops, bubbles and sparkles burst out, the game begins.
   pressPlay() {
     if (state.phase !== PHASE.TITLE || !assets.title) return;
     const { x, y, r } = TITLE.play;
@@ -405,10 +387,6 @@ class Game {
       this.titleFx.puff(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.8, Math.cos(a), 2, true);
     }
     this.titleFx.sparkle(x, y - r * 0.4, 14);
-    for (const f of this.titleFish) {
-      if (f.zone) f.startle({ x, y });
-      else f.wiggle();
-    }
     this.audio.play('splashSmall');
     this.audio.play('cheer');
     this.start();
@@ -827,7 +805,7 @@ class Game {
     ctx.drawImage(c, x0, top);
   }
 
-  // Fish, bubbles and splashes for the title banner. Also runs while it fades out after Play.
+  // Bubbles and splashes for the title banner. Also runs while it fades out after Play.
   updateTitle(dt) {
     this.titleFx.update(dt);
     const pa = this.playAnim;
@@ -839,35 +817,6 @@ class Game {
     if (pa.bubbleIn <= 0) {
       pa.bubbleIn = 0.28 + Math.random() * 0.3;
       this.titleFx.puff(px + (Math.random() - 0.5) * 150, py + 70, 0, 1);
-    }
-    pa.angle += dt * TITLE.orbit.speed * (1 + pa.burst * 4);
-    const sideFish = this.titleFish.filter((f) => f.zone);
-    for (const f of this.titleFish) {
-      if (f.zone) {
-        f.update(dt, f.zone, sideFish);
-      } else {
-        // a 3D orbit: the far side runs behind the button, smaller and dimmer, and each fish
-        // turns edge-on at the sides instead of flipping
-        const a = pa.angle + f.orbit;
-        const spread = 1 + pa.burst * 2.4;
-        f.x = px + Math.cos(a) * TITLE.orbit.rx * spread;
-        f.y = py + Math.sin(a) * TITLE.orbit.ry * spread + Math.sin(a * 2 + f.orbit) * 8;
-        const facing = -Math.sin(a);
-        f.dir = Math.sign(facing || 1) * Math.max(0.12, Math.abs(facing));
-        f.scale = 0.82 + 0.26 * (Math.sin(a) + 1) / 2;
-        f.depth = Math.sin(a);
-        f.bobPhase += dt * 2.2;
-        f.breath -= dt;
-        if (f.wiggleT >= 0) { f.wiggleT += dt; if (f.wiggleT > 0.45) f.wiggleT = -1; }
-      }
-      if (f.breath <= 0) {
-        f.breath = 1.4 + Math.random() * 2.4;
-        f.puffs += 1 + Math.floor(Math.random() * 3);
-      }
-      if (f.puffs > 0) {
-        this.titleFx.puff(f.x + Math.sign(f.dir) * f.w * 0.42 * f.scale, f.y + f.h * 0.1, Math.sign(f.dir), f.puffs);
-        f.puffs = 0;
-      }
     }
     this.titleSplashIn -= dt;
     if (this.titleSplashIn <= 0) {
@@ -1086,19 +1035,9 @@ class Game {
     }
     ctx.save();
     ctx.globalAlpha = alpha;
-    this.titleFx.drawWater(ctx, 0, this.titleFish);
+    this.titleFx.drawWater(ctx, 0, []);
     ctx.restore();
-    const behind = this.titleFish.filter((f) => f.zone || f.depth < 0);
-    const inFront = this.titleFish.filter((f) => !f.zone && f.depth >= 0);
-    for (const f of behind) {
-      f.alpha = alpha * (f.zone ? 1 : 0.72 + 0.28 * (1 + f.depth));
-      f.draw(ctx);
-    }
     this.drawPlayButton(ctx, alpha);
-    for (const f of inFront) {
-      f.alpha = alpha;
-      f.draw(ctx);
-    }
     ctx.save();
     ctx.globalAlpha = alpha;
     this.titleFx.drawFront(ctx);
