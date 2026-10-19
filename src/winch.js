@@ -107,16 +107,17 @@ function drawRope(ctx, from, to, width, phase = 0) {
   ctx.restore();
 }
 
-// The lifting ring the net hangs from, registered on its shackle (where the rope ends): brass
-// to match the machine.
-const RING_DEPTH = 34;
+// The lifting ring the net hangs from: the generated brass connector, drawn whole, with the top
+// of its socket at y. Its socket is a little wider than the lifting rope, so the rope's end
+// disappears into it. The sling's legs meet RING_KNOT below y, behind the ring's top bar, so
+// they come through the ring's hole with no join showing.
+const CONNECTOR = { w: 1024, h: 1536, socketTop: 156, ringBottom: 1367 }; // image pixels
+const RING_DEPTH = 46;  // socket top to ring bottom, drawn
+const RING_KNOT = 12;
 function drawRing(ctx, x, y) {
-  // The socket starts at y, and the ring bottom overlaps both sling ropes. Preserve
-  // the entire generated connector including its antialiased silhouette.
-  const h = 34 * 1536 / 1211;
-  const w = h * 1024 / 1536;
-  ctx.drawImage(assets.ropeConnector, x-w/2, y-156/1536*h, w, h);
+  const k = RING_DEPTH / (CONNECTOR.ringBottom - CONNECTOR.socketTop);
+  ctx.drawImage(assets.ropeConnector, x - (CONNECTOR.w * k) / 2, y - CONNECTOR.socketTop * k, CONNECTOR.w * k, CONNECTOR.h * k);
 }
 
-Object.assign(PopoGame, { Winch, drawRope, drawRing, RING_DEPTH, TUCK });
+Object.assign(PopoGame, { Winch, drawRope, drawRing, RING_KNOT, TUCK });
 })(window.PopoGame = window.PopoGame || {});

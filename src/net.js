@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { geo, drawRope, drawRing, RING_DEPTH } = PopoGame;
+const { geo, drawRope, drawRing, RING_KNOT } = PopoGame;
 const { sub, add, times, dot, length, distance, midpoint, lerp, normalize, parallel, angleAt, intersection, isValidQuad, insideConvex, rotate } = geo;
 
 // The fishing net: a rope frame of four corners A, B, C, D (top-left, clockwise) hung from one
@@ -20,7 +20,7 @@ const GLOW = '#8ff7a8';
 // Wound up, the net gathers under its ring: a tenth as wide and under half as long, hanging
 // from the knot where the sling meets.
 const GATHER = { x: 0.9, y: 0.55 };
-const KNOT = RING_DEPTH - 4;
+const KNOT = RING_KNOT;
 // the outline of a torn hole, as shares of its full size, all the way round
 const RAGGED = [1, 0.62, 0.9, 0.7, 1, 0.58, 0.86, 0.66, 0.97, 0.6, 0.92, 0.72, 1, 0.64, 0.84, 0.7];
 const INK = 'rgba(12, 40, 70, 0.9)';
@@ -341,9 +341,10 @@ class Net {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     if (wet) ctx.filter = 'saturate(0.6) brightness(0.85)';
-    // the lifting rope down from the boom's pulley to the ring, and the sling from the ring
-    // to the top corners that carries the whole frame: the machine's painted rope, tiled
-    drawRope(ctx, pulley, { x: ring.x, y: ring.y + 4 }, 11, this.ropePhase);
+    // the lifting rope runs down from the boom's pulley into the ring's socket; the sling that
+    // carries the whole frame runs through the ring (behind its bars) to the top corners; the
+    // ring is drawn over both. The machine's painted rope, tiled.
+    drawRope(ctx, pulley, { x: ring.x, y: ring.y + 6 }, 10, this.ropePhase);
     const knot = { x: ring.x, y: ring.y + KNOT };
     drawRope(ctx, knot, corners[0], 7);
     drawRope(ctx, knot, corners[1], 7);
