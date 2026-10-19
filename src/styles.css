@@ -184,8 +184,8 @@ html, body {
 
 /* ---------- Drop Net: the one action, a chunky game button. A sunny face with the game's
    dark-brown ink for its outline, its label (about 10:1 on the face) and the lip it presses down
-   onto; the net icon sits in a dark badge. It pops in, and while the net's frame is right it
-   springs up, breathes a warm glow and a shine sweeps across it. ---------- */
+   onto; the net icon sits in a dark badge. It pops in and a shine sweeps across it now and then,
+   the same whether the net is right or not (pressing it is how the child finds out). ---------- */
 .actions {
   position: absolute;
   right: 3.2%;
@@ -240,15 +240,10 @@ html, body {
   border-radius: inherit;
   background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.7) 50%, transparent 62%) 150% 0 / 200% 100% no-repeat;
   pointer-events: none;
+  animation: shine 4s ease-in-out 1.5s infinite;
 }
-.drop-btn.ready { animation: ready-pop 0.45s cubic-bezier(0.2, 1.7, 0.4, 1), ready-glow 1.4s ease-in-out 0.45s infinite; }
-.drop-btn.ready::after { animation: shine 2.4s ease-in-out 0.5s infinite; }
 @keyframes next-in { from { transform: translateY(1.2em) scale(0.3); opacity: 0; } }
-@keyframes ready-pop { 50% { transform: scale(1.12); } }
-@keyframes ready-glow {
-  50% { box-shadow: 0 0.22em 0 #3b1d00, 0 0.55em 1em rgba(0, 20, 60, 0.35), 0 0 0 0.28em rgba(255, 246, 180, 0.92), 0 0 1.6em 0.5em rgba(255, 196, 40, 0.65), inset 0 0.12em 0 rgba(255, 255, 255, 0.8), inset 0 -0.18em 0 rgba(214, 100, 0, 0.35); }
-}
-@keyframes shine { 0% { background-position: 150% 0; } 55%, 100% { background-position: -50% 0; } }
+@keyframes shine { 0% { background-position: 150% 0; } 30%, 100% { background-position: -50% 0; } }
 .drop-btn.leave { animation: drop-leave 0.26s ease-in forwards; pointer-events: none; }
 @keyframes drop-leave { to { transform: translateY(0.5em) scale(0.6); opacity: 0; } }
 

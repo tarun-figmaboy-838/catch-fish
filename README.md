@@ -3,7 +3,7 @@
 A browser game for Grades 1–2 about parallelograms. Popo the polar bear fishes with a net
 hung from a winch on his raft. Before he lowers it, the child fixes its shape: three corners
 A, B, C, D are fixed and one glows; the child drags that corner until the net has the property
-the level asks for (Drop Net glows when it does) and presses Drop Net. A right net goes down
+the level asks for and presses Drop Net. A right net goes down
 over the school, the fish are netted, hauled up and tipped into the bucket, and Popo winds
 the net up and lets the next one down. A wrong net goes down all the same, but the catch
 thrashes, tears through it and dives back into the sea. Eight nets teach the properties one
@@ -58,8 +58,9 @@ original artwork, voice recordings and tools out of the deployment.
   exactly when A + C = B + D, so the movable corner's place follows from the other three;
   the check for each level uses the real measurements with child-sized tolerances (about
   3.5° of parallel, a quarter metre, 3° of angle). While dragging, the corner is kept inside
-  its limits and off bow ties; inside the snap radius it is pulled toward its place and
-  settles onto it when let go, but nothing completes until the child presses Drop Net. Positions
+  its limits and off bow ties, and it goes exactly where the child puts it: nothing pulls it
+  toward its place, nothing glows when it's right, and nothing completes until the child
+  presses Drop Net. Positions
   are net coordinates measured from the lifting ring, and the whole stage scales to the
   screen, so metres and degrees are the same everywhere and survive a resize.
 - **Stage.** The world is a fixed 1672x941 logical space scaled to the viewport. The paintings
@@ -68,16 +69,17 @@ original artwork, voice recordings and tools out of the deployment.
 - **Teaching the shape.** Every level shows only what it is about: parallel ticks that turn
   green when a pair lines up, side lengths in metres (references fixed, the rest live), angle
   arcs with degrees, or the diagonals with O and their four halves; vertex labels A–D are always
-  there. Drop Net glows, with a chime, while the frame has the property. Pressed then, it locks
-  the exact answer, lights the property with its praise, and the net goes down for the catch.
+  there. Drop Net looks the same whether the frame is right or not; pressed with the property
+  (within child-sized tolerances), it locks the exact answer with a small click into place,
+  lights the property with its praise, and the net goes down for the catch.
   Pressed with a wrong frame, the net goes down all the same: the netted fish thrash until the
   mesh tears, then wriggle out and dive back into the sea; the level's hint shows while Popo
   winds the torn net up and lets it down mended, in the shape the child left it, and its corner
   wobbles to say it's the one to fix.
 - **Hints.** Left alone, the first net shows the hand dragging once toward the corner's
   place; later nets swell their measurements instead (the supplementary level shows
-  65° + ? = 180° once the child starts), so the game teaches rather than solves itself. Once
-  the frame is right, idling makes the hand tap on Drop Net.
+  65° + ? = 180° once the child starts), so the game teaches rather than solves itself. No hint
+  says whether the net is right; Drop Net does.
 - **HUD.** Narration follows the Fishing Frenzy games: the instruction (prompt, praise, hint)
   and the narrator's lines sit on one translucent navy plate with a faint gold rim, white
   text and the key word in gold, fitted to the words (a line that wraps is balanced and the
@@ -85,7 +87,7 @@ original artwork, voice recordings and tools out of the deployment.
   word, growing word by word with its line breaks pinned. Sound and pause are its round orange
   icon buttons. Drop Net, the one action, is a chunky game button bottom right: a sunny face
   with dark-brown outline, label (about 10:1 contrast) and a lip it presses down onto, the net
-  icon in a badge; it pops in, and while the frame is right it glows and a shine sweeps it.
+  icon in a badge; it pops in and a shine sweeps it now and then.
   The pause and final cards' buttons match it.
 - **The winch** (`src/winch.js`): the generated arched machine (`assets/generated/winch-arched.png`)
   drawn whole at one scale on the raft's deck, its end pulley out over the water where the
@@ -152,8 +154,8 @@ Headless Chromium through Python Playwright (`pip install playwright pillow`):
 
 - `python3 tests/playthrough.py` – plays all eight nets with real pointer drags and the Drop
   Net button: a wrong net dropped anyway loses its catch and comes back mended with a hint,
-  Drop Net glows once the corner is in its place (also through a mid-drag resize) and then
-  locks the exact answer with its praise, every fish is netted, waters change, pause freezes
+  the corner stays where it's dragged (also through a mid-drag resize) with nothing giving the
+  answer away, and Drop Net then locks the exact answer with its praise, every fish is netted, waters change, pause freezes
   the game, the final card appears, Play Again starts over.
 - `python3 tests/geometry.py` – every level's property holds exactly at the solved position and
   fails at the start, the start is a simple frame well outside the snap radius, the corner can

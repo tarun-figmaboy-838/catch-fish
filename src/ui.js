@@ -105,9 +105,9 @@ class UI {
     if (!on) this.dragId = null;
   }
 
-  // Drop Net, the one action: 'on' while the child solves, 'ready' (glowing) while the frame
-  // is right, 'hidden' while the net is down. Set every frame, so it only changes on a change.
-  // Once pressed it drops away rather than vanishing.
+  // Drop Net, the one action: 'on' while the child solves, 'hidden' while the net is down. It
+  // looks the same whether the net is right or not. Once pressed it drops away rather than
+  // vanishing.
   setDrop(mode) {
     if (mode === this.dropMode) return;
     const shown = !this.el.drop.hidden;
@@ -115,7 +115,6 @@ class UI {
     const b = this.el.drop;
     clearTimeout(this.dropLeaving);
     b.classList.remove('leave');
-    b.classList.toggle('ready', mode === 'ready');
     if (mode !== 'hidden' || !shown) {
       b.hidden = mode === 'hidden';
       return;

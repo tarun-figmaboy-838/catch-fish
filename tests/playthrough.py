@@ -68,7 +68,7 @@ def drag(page, to, steps=24, resize_at=None):
         page.mouse.move(x0 + (to[0] - x0) * t, y0 + (to[1] - y0) * t)
         page.wait_for_timeout(16)
     page.mouse.up()
-    page.wait_for_timeout(350)  # a corner let go near its place settles onto it
+    page.wait_for_timeout(350)
 
 
 def play():
@@ -83,8 +83,8 @@ def play():
         page.evaluate('() => { window.completed = null; window.addEventListener("popo:complete", (e) => { window.completed = e.detail; }); }')
         page.click('#btn-play', force=True)
         st = wait_for(page, lambda s: s['phase'] == 'puzzleReady', 60, 'the first net')
-        check(st['level'] == 0 and st['fish'] == 3 and not st['dropHidden'] and not st['dropReady'],
-              'the first net is ready with its school and Drop Net there to try, not glowing')
+        check(st['level'] == 0 and st['fish'] == 3 and not st['dropHidden'],
+              'the first net is ready with its school and Drop Net there to try')
 
         levels = page.evaluate('() => PopoGame.LEVELS.map((l) => ({ fish: l.fish, location: l.location, prompt: l.prompt.replace(/\\*/g, ""), praise: l.praise.replace(/\\*/g, "") }))')
         for i, level in enumerate(levels):
@@ -109,7 +109,7 @@ def play():
                 page.set_viewport_size({'width': 1280, 'height': 720})
                 page.wait_for_timeout(200)
             st = state(page)
-            check(st['ok'] and st['dropReady'], f'level {i + 1}: the corner is in its place and Drop Net glows')
+            check(st['ok'] and not st['dropReady'], f'level {i + 1}: the corner is where the child put it, right, and nothing gives it away')
 
             if i == 0:
                 page.evaluate('() => window.popoDebug.game.togglePause()')

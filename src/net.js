@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { geo, drawRope, drawRing, RING_KNOT } = PopoGame;
+const { geo, drawRope, drawRing, RING_KNOT, RING_BAR } = PopoGame;
 const { sub, add, times, dot, length, distance, midpoint, lerp, normalize, parallel, angleAt, intersection, isValidQuad, insideConvex, rotate } = geo;
 
 // The fishing net: a rope frame of four corners A, B, C, D (top-left, clockwise) hung from one
@@ -48,15 +48,13 @@ class Net {
     this.start = this.points.map((p) => ({ ...p }));
     this.movable = 1;
     this.target = { ...this.points[1] };
-    this.magnet = 44;
+    this.nearby = 44;     // how close to its place counts as near it (see check)
     this.along = null;
     this.scale = 70;      // stage pixels per metre shown
     this.locked = true;
-    this.settling = false;
     this.visible = false;
     this.alpha = 1;
     this.time = 0;
-    this.near = 0;        // how close the corner is to its place, smoothed, for the glow
     this.wobble = 0;      // a shake of the corner after a wrong check
     this.flash = 0;       // the frame lights up when the shape comes right
     this.glow = null;     // the property highlight: steps played one after another
@@ -85,7 +83,7 @@ class Net {
     this.along = level.along ? { base: this.target, dir: normalize(sub(this.solved[j], this.solved[i])) } : null;
     const [name, metres] = Object.entries(level.metres || { AB: 6 })[0];
     this.scale = length(this.sideOf(name, this.solved)) / metres;
-    this.magnet = Math.min(level.width, level.height) * 0.22;
+    this.nearby = Math.min(level.width, level.height) * 0.22;
     this.locked = false;
     this.touched = false;
     this.flash = 0;
@@ -150,10 +148,6 @@ class Net {
     return distance(this.points[this.movable], this.target);
   }
 
-  get withinReach() {
-    return this.distance() <= this.magnet;
-  }
-
   bottom() {
     return Math.max(...this.points.map((p) => p.y));
   }
@@ -170,15 +164,13 @@ class Net {
     return insideConvex(this.toNet(stagePoint), this.points);
   }
 
-  // Moves the corner toward a wanted net point: kept inside its limits (and on its line, when
-  // the level has one), never folding the frame into a bow tie or squashing it flat, and
-  // drawn toward its place once it comes near (the magnet).
+  // Moves the corner to a wanted net point: kept inside its limits (and on its line, when the
+  // level has one), never folding the frame into a bow tie or squashing it flat. It goes
+  // exactly where the child puts it; nothing pulls it toward its place.
   moveHandle(want) {
     const l = this.limits;
     let p = { x: Math.min(l.right, Math.max(l.left, want.x)), y: Math.min(l.bottom, Math.max(l.top, want.y)) };
     if (this.along) p = add(this.along.base, times(this.along.dir, dot(sub(p, this.along.base), this.along.dir)));
-    const d = distance(p, this.target);
-    if (d < this.magnet) p = lerp(p, this.target, (1 - d / this.magnet) ** 2 * 0.7);
     const trial = this.points.map((q, i) => (i === this.movable ? p : q));
     if (!isValidQuad(trial)) return false;
     this.points[this.movable] = p;
@@ -241,7 +233,7 @@ class Net {
     }
   }
 
-  // Whether the frame has the level's property, and where the corner settles if it does.
+  // Whether the frame has the level's property, and where the corner locks if it does.
   // The exact parallelogram point is A + C = B + D solved for the corner; a parallel-only
   // level also accepts the corner anywhere along the parallel line, and keeps its length.
   check() {
@@ -254,7 +246,7 @@ class Net {
     switch (L.type) {
       case 'parallel': {
         ok = this.pairParallel(L.sides);
-        if (ok && this.distance() > this.magnet * 2.5) {
+        if (ok && this.distance() > this.nearby * 2.5) {
           const mine = L.sides.find((name) => name.includes(L.corner));
           const other = L.sides.find((name) => name !== mine);
           const fixed = p[corner(mine.replace(L.corner, ''))];
@@ -296,8 +288,6 @@ class Net {
 
   update(dt) {
     this.time += dt;
-    const want = this.locked ? 0 : Math.max(0, 1 - this.distance() / (this.magnet * 1.6));
-    this.near += (want - this.near) * Math.min(1, dt * 10);
     if (this.wobble > 0) this.wobble = Math.max(0, this.wobble - dt / 0.45);
     if (this.flash > 0) this.flash = Math.max(0, this.flash - dt / 0.7);
     if (this.hintPulse > 0) this.hintPulse = Math.max(0, this.hintPulse - dt);
@@ -342,13 +332,22 @@ class Net {
     ctx.lineJoin = 'round';
     if (wet) ctx.filter = 'saturate(0.6) brightness(0.85)';
     // the lifting rope runs down from the boom's pulley into the ring's socket; the sling that
-    // carries the whole frame runs through the ring (behind its bars) to the top corners; the
-    // ring is drawn over both. The machine's painted rope, tiled.
+    // carries the whole frame comes up from the top corners behind the ring and is lashed to
+    // its bottom bar with two turns, which hide the legs' ends. The machine's painted rope, tiled.
     drawRope(ctx, pulley, { x: ring.x, y: ring.y + 6 }, 10, this.ropePhase);
     const knot = { x: ring.x, y: ring.y + KNOT };
     drawRope(ctx, knot, corners[0], 7);
     drawRope(ctx, knot, corners[1], 7);
     drawRing(ctx, ring.x, ring.y);
+    // the turns stay on the bar, so their ends look tucked round behind it
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ring.x - 12, ring.y + RING_BAR.top, 24, RING_BAR.bottom - RING_BAR.top);
+    ctx.clip();
+    for (const dx of [-3, 3]) {
+      drawRope(ctx, { x: ring.x + dx - 1.5, y: ring.y + RING_BAR.top - 2 }, { x: ring.x + dx + 1.5, y: ring.y + RING_BAR.bottom + 2 }, 5.5);
+    }
+    ctx.restore();
     ctx.filter = 'none';
 
     this.drawGenerated(ctx, wet);
@@ -754,15 +753,14 @@ class Net {
     });
   }
 
-  // The one corner that moves: a big knob with a breathing halo, turning green as it nears
-  // its place.
+  // The one corner that moves: a big knob with a breathing halo. It looks the same wherever it
+  // is, so it never gives away its place.
   drawHandle(ctx, p) {
     const pulse = this.reduced ? 0.5 : (Math.sin(this.time * 3.2) + 1) / 2;
-    const near = this.near > 0.5;
     const r = 34 + pulse * 12;
     const g = ctx.createRadialGradient(p.x, p.y, 10, p.x, p.y, r);
-    g.addColorStop(0, near ? `rgba(120, 255, 160, ${0.7 + pulse * 0.2})` : `rgba(255, 214, 90, ${0.6 + pulse * 0.25})`);
-    g.addColorStop(1, near ? 'rgba(120, 255, 160, 0)' : 'rgba(255, 214, 90, 0)');
+    g.addColorStop(0, `rgba(255, 214, 90, ${0.6 + pulse * 0.25})`);
+    g.addColorStop(1, 'rgba(255, 214, 90, 0)');
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(p.x, p.y, r, 0, TAU);
@@ -774,7 +772,7 @@ class Net {
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(p.x, p.y, 16, 0, TAU);
-    ctx.fillStyle = near ? '#9cf7b4' : '#ffd84a';
+    ctx.fillStyle = '#ffd84a';
     ctx.fill();
     ctx.lineWidth = 3.5;
     ctx.strokeStyle = '#4a2c0f';

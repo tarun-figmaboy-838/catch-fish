@@ -262,20 +262,6 @@ async function slideCorner(net, from, to, token, ms = 480) {
 }
 
 // --- the puzzle -------------------------------------------------------------------
-// Let go near its place, the corner settles onto it (the child still presses Drop Net).
-async function settleCorner(game) {
-  const net = game.net;
-  const token = state.token;
-  net.settling = true;
-  try {
-    await slideCorner(net, { ...net.points[net.movable] }, net.target, token, 240);
-  } catch (e) {
-    swallow(e);
-  } finally {
-    net.settling = false;
-  }
-}
-
 // A right frame: the corner glides to its exact place and locks, and the property lights up
 // with its praise; it waits until every fish has swum in.
 async function lockAnswer(game, result, token) {
@@ -642,5 +628,5 @@ async function celebrate(game, token) {
   }
 }
 
-Object.assign(PopoGame, { opening, startLevels, settleCorner, dropNet, rowTo, celebrate, letNetDown });
+Object.assign(PopoGame, { opening, startLevels, dropNet, rowTo, celebrate, letNetDown });
 })(window.PopoGame = window.PopoGame || {});

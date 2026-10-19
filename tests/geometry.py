@@ -26,7 +26,7 @@ CHECKS = '''() => {
     const startOk = net.check().ok;
     const startSimple = geo.isSimpleQuad(start);
     const startArea = geo.area(start) / geo.area(net.solved);
-    const distance = geo.distance(start[net.movable], net.target) / net.magnet;
+    const distance = geo.distance(start[net.movable], net.target) / net.nearby;
     net.showSolved();
     const tiny = (a, b) => Math.abs(a - b) < 0.05;
     const property = {
@@ -54,7 +54,7 @@ CHECKS = '''() => {
     return {
       level: i + 1, type: level.type, property, solvedOk, startOk, startSimple, startArea, distance, inLimits, covered,
       clearOfWater: g.netRest.y + Math.max(...net.solved.map((p) => p.y)) <= g.waterline - 30,
-      magnet: net.magnet, schoolSize: [a.right - a.left, a.bottom - a.top],
+      schoolSize: [a.right - a.left, a.bottom - a.top],
     };
   });
 }'''
@@ -82,9 +82,7 @@ def main():
             if r['startArea'] < 0.45:
                 problems.append(f'starting frame too squashed ({r["startArea"]:.2f} of solved)')
             if r['distance'] < 2:
-                problems.append(f'starting corner too close to its place ({r["distance"]:.1f} snap radii)')
-            if r['magnet'] * 1024 / 1672 < 18:
-                problems.append(f'snap radius too small on a tablet ({r["magnet"] * 1024 / 1672:.0f} CSS px)')
+                problems.append(f'starting corner too close to its place ({r["distance"]:.1f} "nearby" radii)')
             if not r['inLimits']:
                 problems.append('the corner cannot be dragged to its place')
             if not r['clearOfWater']:
