@@ -24,8 +24,7 @@ class UI {
   constructor() {
     this.el = {
       hud: $('hud'), hits: $('hits'), handle: $('handle'), hand: $('hand'), start: $('screen-start'), loading: $('loading'), play: $('btn-play'),
-      instruction: $('instruction'), instructionText: $('instruction-text'), level: $('level'), levelText: $('level-text'),
-      caught: $('caught'), caughtText: $('caught-text'), check: $('btn-check'), drop: $('btn-drop'),
+      instruction: $('instruction'), instructionText: $('instruction-text'), drop: $('btn-drop'),
       sound: $('btn-sound'), pause: $('btn-pause'),
       pauseOverlay: $('overlay-pause'), resume: $('btn-resume'), restart: $('btn-restart'),
       completeOverlay: $('overlay-complete'), completeTitle: $('complete-title'), completeLesson: $('complete-lesson'), again: $('btn-again'),
@@ -43,7 +42,6 @@ class UI {
     this.el.pause.addEventListener('click', h('pause'));
     this.el.resume.addEventListener('click', h('resume'));
     this.el.restart.addEventListener('click', h('restart'));
-    this.el.check.addEventListener('click', h('check'));
     this.el.drop.addEventListener('click', h('drop'));
     this.el.again.addEventListener('click', h('again'));
     this.wireHandle();
@@ -88,7 +86,7 @@ class UI {
         this.emit('nudge', step[0], step[1]);
       } else if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        this.emit('check');
+        this.emit('drop');
       }
     });
   }
@@ -107,36 +105,26 @@ class UI {
     if (!on) this.dragId = null;
   }
 
-  // Check: 'ready' while the child solves, 'busy' while an answer is judged, 'hidden' after.
-  setCheck(mode) {
-    const b = this.el.check;
-    b.hidden = mode === 'hidden';
-    b.disabled = mode !== 'ready';
-  }
-
-  // Drop Net: 'hidden', 'disabled' (the shape isn't right yet) or 'ready'
+  // Drop Net, the one action: 'on' while the child solves, 'ready' (glowing) while the frame
+  // is right, 'hidden' while the net is down. Set every frame, so it only changes on a change.
+  // Once pressed it drops away rather than vanishing.
   setDrop(mode) {
+    if (mode === this.dropMode) return;
+    const shown = !this.el.drop.hidden;
+    this.dropMode = mode;
     const b = this.el.drop;
-    b.hidden = mode === 'hidden';
-    b.disabled = mode !== 'ready';
+    clearTimeout(this.dropLeaving);
+    b.classList.remove('leave');
     b.classList.toggle('ready', mode === 'ready');
-    if (mode === 'ready') b.focus({ preventScroll: true });
-  }
-
-  setLevel(index, count) {
-    const text = `${index + 1} / ${count}`;
-    if (this.el.levelText.textContent === text) return;
-    this.el.levelText.textContent = text;
-    this.el.level.style.setProperty('--progress', `${(index + 1) / count * 100}%`);
-    this.pop(this.el.level);
-  }
-
-  // The fish tally pops as each fish lands in the bucket.
-  setCaught(count) {
-    const text = String(count);
-    if (this.el.caughtText.textContent === text) return;
-    this.el.caughtText.textContent = text;
-    this.pop(this.el.caught);
+    if (mode !== 'hidden' || !shown) {
+      b.hidden = mode === 'hidden';
+      return;
+    }
+    b.classList.add('leave');
+    this.dropLeaving = setTimeout(() => {
+      b.hidden = true;
+      b.classList.remove('leave');
+    }, 260);
   }
 
   pop(el) {
@@ -153,8 +141,10 @@ class UI {
   }
 
   // --- story lines -----------------------------------------------------------
-  // A story line: a speech bubble (Popo's, anchored at a stage point) or the narrator's caption.
-  // Every word is laid out up front (hidden) so the bubble never resizes as words appear.
+  // A story line: Popo's speech bubble, anchored at a stage point, or the narrator's caption.
+  // The caption lays its words out hidden, so its plate never changes size. The bubble lays the
+  // whole line out once, balanced over its lines, and pins each break there; then it starts
+  // small and grows word by word into exactly that shape, with no empty space ahead.
   showLine(who, words) {
     this.hideLines();
     const el = who === 'narrator' ? this.el.caption : this.el.speech;
@@ -168,9 +158,7 @@ class UI {
       return span;
     });
     el.hidden = false;
-    if (el === this.el.speech) {
-      this.speechBox = { w: el.offsetWidth, h: el.offsetHeight, em: parseFloat(getComputedStyle(el).fontSize) };
-    }
+    if (el === this.el.speech) this.pinBreaks(el, line);
     el.classList.remove('pop', 'bump');
     void el.offsetWidth;
     el.classList.add('pop');
@@ -178,9 +166,27 @@ class UI {
     this.lineEl = el;
   }
 
+  // Measures the bubble with every word showing and its lines balanced, then pins a break before
+  // each word that starts a new line.
+  pinBreaks(el, line) {
+    el.classList.add('measuring');
+    // a word's middle, not its top: the bigger stressed words sit higher in the same line
+    const mids = this.wordEls.map((span) => span.offsetTop + span.offsetHeight / 2);
+    const em = parseFloat(getComputedStyle(el).fontSize);
+    this.speechBox = { w: el.offsetWidth, h: el.offsetHeight, em };
+    el.classList.remove('measuring');
+    this.breaks = this.wordEls.map((span, i) => {
+      if (!i || mids[i] - mids[i - 1] < em * 0.6) return null;
+      const br = document.createElement('br');
+      line.insertBefore(br, span);
+      return br;
+    });
+  }
+
   revealWord(i, bump) {
     const span = this.wordEls && this.wordEls[i];
     if (span) span.classList.add('in');
+    if (this.breaks && this.breaks[i]) this.breaks[i].classList.add('in');
     if (bump && this.lineEl === this.el.speech) {
       this.el.speech.classList.remove('pop', 'bump');
       void this.el.speech.offsetWidth;
@@ -194,7 +200,7 @@ class UI {
     const b = this.speechBox || { w: 0, h: 0, em: 0 };
     const width = this.el.hits.clientWidth;
     const left = Math.min(x * this.scale, width - b.w + 0.6 * b.em - 4);
-    const top = Math.max(y * this.scale, b.h + 4);
+    const top = Math.max(y * this.scale, b.h + 14); // clear of the top edge, even as it pops
     this.el.speech.style.left = `${left.toFixed(1)}px`;
     this.el.speech.style.top = `${top.toFixed(1)}px`;
   }
@@ -205,6 +211,7 @@ class UI {
     this.el.hud.classList.remove('talking');
     this.lineEl = null;
     this.wordEls = null;
+    this.breaks = null;
   }
 
   // --- screens and HUD ---------------------------------------------------------
@@ -218,6 +225,7 @@ class UI {
   setScale(scale) {
     this.scale = scale;
     if (this.dragId !== null) this.dragRect = this.el.hits.getBoundingClientRect();
+    this.fitInstruction();
   }
 
   setLoading(text) {
@@ -249,8 +257,33 @@ class UI {
     markup(this.el.instructionText, text);
     if (!text) return;
     this.el.instruction.classList.remove('say', 'pulse');
+    this.fitInstruction();
     void this.el.instruction.offsetWidth;
     this.el.instruction.classList.add('say');
+  }
+
+  // A prompt that wraps is balanced over its lines (in the CSS); its plate then hugs the widest
+  // line instead of keeping the full width, so no empty space sits beside the words. Line boxes
+  // come scaled by any animation running on the HUD, so they're scaled back.
+  fitInstruction() {
+    const t = this.el.instructionText;
+    t.style.width = '';
+    const drawn = t.getBoundingClientRect().width / t.offsetWidth || 1;
+    const range = document.createRange();
+    range.selectNodeContents(t);
+    const lines = [];
+    for (const r of range.getClientRects()) {
+      if (!r.width) continue;
+      const line = lines.find((l) => Math.abs(l.top - r.top) < r.height / 2);
+      if (line) {
+        line.left = Math.min(line.left, r.left);
+        line.right = Math.max(line.right, r.right);
+      } else {
+        lines.push({ top: r.top, left: r.left, right: r.right });
+      }
+    }
+    if (lines.length < 2) return;
+    t.style.width = `${Math.ceil(Math.max(...lines.map((l) => l.right - l.left)) / drawn) + 2}px`;
   }
 
   pulseInstruction() {

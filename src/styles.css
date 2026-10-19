@@ -112,25 +112,37 @@ html, body {
   align-items: start;
   gap: 1em;
 }
-.level-pill { grid-column: 1; justify-self: start; }
 .instruction { grid-column: 2; }
 .hud-buttons { grid-column: 3; display: flex; gap: 0.9em; justify-self: end; }
 
+/* The narration plate, as in Fishing Frenzy: a translucent deep-navy plate with a faint gold
+   rim and a soft shadow, white text with the key word in gold. A plate to read, not a button
+   to press; it fits its text and stays centred. The narrator's caption is the same plate. */
 .instruction {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.5em 1.35em 0.56em;
-  border-radius: 1.1em;
-  background: var(--paper);
-  border: 0.14em solid var(--ink);
-  box-shadow: 0 0.18em 0 var(--ink), 0 0.6em 1.3em rgba(0, 20, 60, 0.25);
-  color: var(--ink);
+  justify-self: center;
+  width: max-content;
+  max-width: 100%;
+  text-align: center;
+  padding: 0.55em 1.6em 0.6em;
+  border-radius: 0.9em;
+  background: rgba(8, 36, 84, 0.62);
+  border: 0.1em solid rgba(255, 214, 140, 0.35);
+  box-shadow: 0 0.4em 1.2em rgba(0, 20, 60, 0.3), inset 0 0.08em 0 rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: #fff8ec;
   font-size: 2.9em;
   font-weight: 600;
+  letter-spacing: 0.01em;
+  text-shadow: 0 0.06em 0.14em rgba(0, 0, 0, 0.35);
   transition: opacity 0.3s ease;
 }
-.instruction .hl { color: var(--accent); font-weight: 700; }
+.instruction .hl { color: #ffd166; font-weight: 700; text-shadow: 0 0.06em 0.14em rgba(0, 0, 0, 0.4); }
+/* a prompt or a narrator's line that wraps splits evenly, never leaving one word on its own */
+.instruction, .caption .line { text-wrap: balance; }
 .instruction.say { animation: instruction-boing 0.55s cubic-bezier(0.2, 1.8, 0.4, 1); }
 @keyframes instruction-boing {
   0% { transform: scale(0.6, 1.2); }
@@ -141,97 +153,125 @@ html, body {
 @keyframes instruction-nudge { 50% { transform: scale(1.08); } }
 .hud.talking .instruction, .instruction.empty { opacity: 0; }
 
-/* a small "1 / 6" so progress is visible without competing with the instruction */
-.level-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35em;
-  margin-top: 0.3em;
-  padding: 0.3em 0.9em 0.32em 0.7em;
-  border-radius: 999px;
-  background: rgba(255, 248, 232, 0.82);
-  border: 0.1em solid rgba(59, 29, 0, 0.55);
-  color: var(--ink);
-  font-size: 2.2em;
-  font-weight: 700;
-}
-.level-pill svg { width: 1.3em; height: auto; }
 
+/* The buttons are the reference game's (Fishing Frenzy): round orange icon buttons, and orange
+   pills for actions. Its colours are written out, as this page's --ink was later retuned for the
+   cards. */
 .icon-btn {
   font: inherit;
-  width: max(5.6em, 44px);
-  height: max(5.6em, 44px);
+  position: relative;
+  width: 5.6em;
+  height: 5.6em;
   border-radius: 50%;
-  border: 0.18em solid var(--ink);
+  border: 0.18em solid #3b1d00;
   background: linear-gradient(180deg, #ffd860, #ff9a1c);
-  color: var(--ink);
+  color: #3b1d00;
   display: grid;
   place-items: center;
   cursor: pointer;
-  box-shadow: 0 0.2em 0 var(--ink), 0 0.5em 1.2em rgba(0, 20, 60, 0.28), inset 0 0.16em 0 rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0.2em 0 #3b1d00, 0 0.5em 1.2em rgba(0, 20, 60, 0.28), inset 0 0.16em 0 rgba(255, 255, 255, 0.6);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
   padding: 0;
 }
 .icon-btn svg { width: 55%; height: 55%; }
-.icon-btn:active { transform: translateY(0.15em) scale(0.94); box-shadow: 0 0.05em 0 var(--ink), 0 0.3em 0.8em rgba(0, 20, 60, 0.28); }
+/* on a phone the drawn button is small, so its tap area reaches out to at least 44px */
+.icon-btn::after { content: ""; position: absolute; inset: min(-0.2em, calc((5.6em - 44px) / 2)); border-radius: 50%; }
+.icon-btn:active { transform: translateY(0.15em) scale(0.94); box-shadow: 0 0.05em 0 #3b1d00, 0 0.3em 0.8em rgba(0, 20, 60, 0.28); }
 .icon-btn:focus-visible { outline: 0.3em solid #fff; outline-offset: 0.2em; }
 .icon-btn .mute { display: none; }
 .icon-btn.muted .wave { display: none; }
 .icon-btn.muted .mute { display: block; }
 
-/* ---------- Drop Net: quiet until the parallelogram is made, then it pops and glows ---------- */
-.drop-btn {
+/* ---------- Drop Net: the one action, a chunky game button. A sunny face with the game's
+   dark-brown ink for its outline, its label (about 10:1 on the face) and the lip it presses down
+   onto; the net icon sits in a dark badge. It pops in, and while the net's frame is right it
+   springs up, breathes a warm glow and a shine sweeps across it. ---------- */
+.actions {
   position: absolute;
-  right: 3.4%;
-  top: 44%;
-  transform: translateY(-50%);
+  right: 3.2%;
+  bottom: 5%;
+  display: flex;
+  pointer-events: none;
+}
+.drop-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 0.4em;
+  gap: 0.45em;
   font: inherit;
-  font-size: 3.1em;
-  font-weight: 700;
-  padding: 0.42em 1.1em 0.46em 0.85em;
+  font-size: 3.4em;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.32em 1.1em 0.36em 0.36em;
+  min-height: 44px;
   border-radius: 999px;
-  border: 0.13em solid var(--ink);
-  background: linear-gradient(180deg, #ffc15e, #f08a1d);
-  color: #2b1600;
+  border: 0.12em solid #3b1d00;
+  background: linear-gradient(180deg, #fff27a 0%, #ffd23f 45%, #ffa51f 100%);
+  color: #3b1d00;
   cursor: pointer;
-  box-shadow: 0 0.16em 0 var(--ink), 0 0.5em 1.4em rgba(240, 138, 29, 0.45), inset 0 0.15em 0 rgba(255, 255, 255, 0.45);
-  transition: transform 0.2s ease, filter 0.25s ease, opacity 0.25s ease, box-shadow 0.25s ease;
+  pointer-events: auto;
+  box-shadow: 0 0.22em 0 #3b1d00, 0 0.55em 1em rgba(0, 20, 60, 0.35), inset 0 0.12em 0 rgba(255, 255, 255, 0.8), inset 0 -0.18em 0 rgba(214, 100, 0, 0.35);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+  animation: next-in 0.55s cubic-bezier(0.2, 1.7, 0.4, 1);
 }
-.drop-btn svg { width: 1.45em; height: auto; }
 .drop-btn[hidden] { display: none; }
-.drop-btn:disabled {
-  cursor: default;
-  filter: saturate(0.25) brightness(0.92);
-  opacity: 0.72;
-  box-shadow: 0 0.16em 0 var(--ink), 0 0.3em 0.8em rgba(0, 20, 60, 0.2);
+.drop-btn .badge {
+  display: grid;
+  place-items: center;
+  width: 1.6em;
+  height: 1.6em;
+  border-radius: 50%;
+  background: #3b1d00;
+  color: #ffd23f;
 }
-.drop-btn.ready {
-  animation: drop-pop 0.28s cubic-bezier(0.2, 1.8, 0.4, 1), drop-glow 1.5s ease-in-out 0.3s infinite;
+.drop-btn .badge svg { width: 64%; height: auto; }
+.drop-btn:hover { filter: brightness(1.06); }
+.drop-btn:active {
+  transform: translateY(0.18em);
+  box-shadow: 0 0.04em 0 #3b1d00, 0 0.25em 0.6em rgba(0, 20, 60, 0.3), inset 0 0.12em 0 rgba(255, 255, 255, 0.8), inset 0 -0.18em 0 rgba(214, 100, 0, 0.35);
 }
-.drop-btn:not(:disabled):active { transform: translateY(-50%) scale(0.95); }
-.drop-btn:focus-visible { outline: 0.25em solid #fff; outline-offset: 0.2em; }
-@keyframes drop-pop {
-  0% { transform: translateY(-50%) scale(0.8); }
-  60% { transform: translateY(-50%) scale(1.1); }
-  100% { transform: translateY(-50%) scale(1); }
+.drop-btn:focus-visible { outline: 0.2em solid #fff; outline-offset: 0.2em; }
+/* the shine: a bright band swept across the face */
+.drop-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.7) 50%, transparent 62%) 150% 0 / 200% 100% no-repeat;
+  pointer-events: none;
 }
-@keyframes drop-glow {
-  0%, 100% { box-shadow: 0 0.16em 0 var(--ink), 0 0.5em 1.4em rgba(240, 138, 29, 0.45), inset 0 0.15em 0 rgba(255, 255, 255, 0.45); }
-  50% { box-shadow: 0 0.16em 0 var(--ink), 0 0 0 0.35em rgba(255, 210, 120, 0.55), 0 0.5em 2em rgba(240, 138, 29, 0.7), inset 0 0.15em 0 rgba(255, 255, 255, 0.45); }
+.drop-btn.ready { animation: ready-pop 0.45s cubic-bezier(0.2, 1.7, 0.4, 1), ready-glow 1.4s ease-in-out 0.45s infinite; }
+.drop-btn.ready::after { animation: shine 2.4s ease-in-out 0.5s infinite; }
+@keyframes next-in { from { transform: translateY(1.2em) scale(0.3); opacity: 0; } }
+@keyframes ready-pop { 50% { transform: scale(1.12); } }
+@keyframes ready-glow {
+  50% { box-shadow: 0 0.22em 0 #3b1d00, 0 0.55em 1em rgba(0, 20, 60, 0.35), 0 0 0 0.28em rgba(255, 246, 180, 0.92), 0 0 1.6em 0.5em rgba(255, 196, 40, 0.65), inset 0 0.12em 0 rgba(255, 255, 255, 0.8), inset 0 -0.18em 0 rgba(214, 100, 0, 0.35); }
 }
+@keyframes shine { 0% { background-position: 150% 0; } 55%, 100% { background-position: -50% 0; } }
+.drop-btn.leave { animation: drop-leave 0.26s ease-in forwards; pointer-events: none; }
+@keyframes drop-leave { to { transform: translateY(0.5em) scale(0.6); opacity: 0; } }
 
-/* ---------- story: Popo's speech bubble and the narrator's caption ---------- */
+/* ---------- story: Popo's speech bubble and the narrator's caption, as in Fishing Frenzy ---------- */
 .speech, .caption { position: absolute; pointer-events: none; z-index: 3; }
 .hud { z-index: 5; }
 .overlay { z-index: 6; }
 .speech[hidden], .caption[hidden] { display: none; }
+/* the caption lays its words out hidden, so its plate never changes size as they appear */
 .line .w { display: inline-block; visibility: hidden; white-space: pre; }
 .line .w.in { visibility: visible; animation: word-in 0.32s cubic-bezier(0.2, 1.8, 0.4, 1); }
-.line .w.em { color: var(--accent); font-weight: 700; font-size: 1.15em; }
+.line .w.em { font-weight: 700; font-size: 1.15em; }
 .line .w.em.in { animation: word-boing 0.55s cubic-bezier(0.2, 1.8, 0.4, 1); }
+/* in the bubble, words take no room until they're said, so it grows with them; the breaks are
+   pinned where the whole line wraps (balanced), so words never jump between lines as it grows */
+.speech .line { white-space: nowrap; }
+.speech .line .w { display: none; visibility: visible; }
+.speech .line br:not(.in) { display: none; }
+.speech .line .w.in { display: inline-block; animation: word-in 0.32s cubic-bezier(0.2, 1.8, 0.4, 1); }
+.speech.measuring .line { white-space: normal; text-wrap: balance; }
+.speech.measuring .line .w { display: inline-block; animation: none; }
+.speech .line .w.em { color: #e8590c; transform-origin: 0 75%; }
+.speech .line .w.em.in { animation: word-boing 0.55s cubic-bezier(0.2, 1.8, 0.4, 1); }
 @keyframes word-in { from { transform: translateY(0.35em) scale(0.4); opacity: 0; } }
 @keyframes word-boing {
   0% { transform: scale(0.2); opacity: 0; }
@@ -247,11 +287,11 @@ html, body {
   font-size: 3.3em;
   font-weight: 700;
   line-height: 1.15;
-  color: var(--ink);
-  background: var(--paper);
-  border: 0.13em solid var(--ink);
+  color: #3b1d00;
+  background: #fff8e8;
+  border: 0.13em solid #3b1d00;
   border-radius: 1.1em;
-  box-shadow: 0 0.16em 0 var(--ink), 0 0.5em 1.2em rgba(0, 20, 60, 0.25);
+  box-shadow: 0 0.16em 0 #3b1d00, 0 0.5em 1.2em rgba(0, 20, 60, 0.25);
   transform: translate(-0.6em, -100%);
   transform-origin: 0.6em 100%;
 }
@@ -263,8 +303,8 @@ html, body {
   border-color: transparent;
   transform: skewX(-24deg);
 }
-.speech::before { left: 0.75em; bottom: -0.88em; border-width: 0.88em 0.95em 0 0; border-top-color: var(--ink); }
-.speech::after { left: 0.95em; bottom: -0.58em; border-width: 0.68em 0.62em 0 0; border-top-color: var(--paper); }
+.speech::before { left: 0.75em; bottom: -0.88em; border-width: 0.88em 0.95em 0 0; border-top-color: #3b1d00; }
+.speech::after { left: 0.95em; bottom: -0.58em; border-width: 0.68em 0.62em 0 0; border-top-color: #fff8e8; }
 .speech.pop { animation: speech-pop 0.45s cubic-bezier(0.2, 1.7, 0.4, 1); }
 @keyframes speech-pop {
   0% { transform: translate(-0.6em, -100%) scale(0.15); opacity: 0; }
@@ -276,22 +316,30 @@ html, body {
   45% { transform: translate(-0.6em, -100%) scale(1.08, 0.94); }
 }
 .caption {
+  /* the narrator's lines: the same navy plate as the instruction (a plate to read, not a speech
+     bubble; Popo's own words keep his bubble), white with the stressed word in gold */
   left: 50%;
   top: 2.2%;
   width: max-content;
-  max-width: 32em;
-  padding: 0.55em 1.3em 0.6em;
+  /* on narrow screens the text can't shrink below its 6.2px-per-em floor, so the plate is also
+     kept clear of the sound and pause buttons in the corner */
+  max-width: min(32em, 100% - 240px);
+  padding: 0.55em 1.4em 0.6em;
   font-size: 3.4em;
   font-weight: 600;
   line-height: 1.25;
   text-align: center;
-  color: var(--ink);
-  background: var(--paper);
-  border: 0.13em solid var(--ink);
-  border-radius: 1em;
-  box-shadow: 0 0.16em 0 var(--ink), 0 0.5em 1.3em rgba(0, 20, 60, 0.25);
+  color: #fff8ec;
+  background: rgba(8, 36, 84, 0.62);
+  border: 0.1em solid rgba(255, 214, 140, 0.35);
+  border-radius: 0.8em;
+  box-shadow: 0 0.4em 1.2em rgba(0, 20, 60, 0.3), inset 0 0.08em 0 rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  text-shadow: 0 0.06em 0.14em rgba(0, 0, 0, 0.35);
   transform: translateX(-50%);
 }
+.caption .line .w.em { color: #ffd166; text-shadow: 0 0.06em 0.14em rgba(0, 0, 0, 0.4); }
 .caption.pop { animation: caption-in 0.55s cubic-bezier(0.2, 1.5, 0.4, 1); }
 @keyframes caption-in {
   from { transform: translateX(-50%) translateY(-0.8em) scale(0.9); opacity: 0; }
@@ -339,29 +387,30 @@ html, body {
 .card.celebrate .hl { color: var(--accent); font-weight: 700; }
 @keyframes card-pop { from { transform: scale(0.6); opacity: 0; } }
 
+/* The cards' buttons are game buttons like Drop Net: the dark-brown ink for outline, label and
+   the lip they press down onto; the main one wears Drop Net's sunny face, the other a cream one. */
 .btn {
   font: inherit;
   font-size: 2.6em;
   font-weight: 800;
-  padding: 0.55em 1.8em;
+  padding: 0.5em 1.7em 0.55em;
   margin: 0.35em;
   border-radius: 999px;
-  border: 0.14em solid rgba(255, 236, 190, 0.85);
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  border: 0.12em solid #3b1d00;
+  background: linear-gradient(180deg, #ffffff, #fff1d6);
+  color: #3b1d00;
   cursor: pointer;
-  box-shadow: 0 0.4em 1.2em rgba(0, 10, 40, 0.35);
-  transition: transform 0.12s ease, filter 0.12s ease;
+  box-shadow: 0 0.22em 0 #3b1d00, 0 0.45em 0.9em rgba(0, 20, 60, 0.25), inset 0 0.12em 0 #fff;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
   min-height: 44px;
 }
 .btn.primary {
-  background: linear-gradient(180deg, #ffc15e, #f08a1d);
-  color: #2b1600;
-  box-shadow: 0 0.5em 1.6em rgba(240, 138, 29, 0.45), inset 0 0.15em 0 rgba(255, 255, 255, 0.45);
+  background: linear-gradient(180deg, #fff27a 0%, #ffd23f 45%, #ffa51f 100%);
+  box-shadow: 0 0.22em 0 #3b1d00, 0 0.45em 0.9em rgba(0, 20, 60, 0.25), inset 0 0.12em 0 rgba(255, 255, 255, 0.8), inset 0 -0.18em 0 rgba(214, 100, 0, 0.35);
 }
-.card.celebrate .btn.primary { border-color: var(--ink); box-shadow: 0 0.16em 0 var(--ink), 0 0.5em 1.4em rgba(240, 138, 29, 0.4); }
-.btn:active { transform: scale(0.95); filter: brightness(0.95); }
-.btn:focus-visible { outline: 0.25em solid #fff; outline-offset: 0.2em; }
+.btn:hover { filter: brightness(1.05); }
+.btn:active { transform: translateY(0.18em); box-shadow: 0 0.04em 0 #3b1d00, 0 0.25em 0.6em rgba(0, 20, 60, 0.25); }
+.btn:focus-visible { outline: 0.2em solid #fff; outline-offset: 0.2em; }
 .btn:disabled { opacity: 0.5; cursor: default; }
 
 /* start screen */
@@ -421,13 +470,12 @@ html, body {
 @container (max-width: 720px) {
   .instruction { font-size: 2.4em; padding: 0.7em 1.4em 0.7em 1em; min-height: 2.4em; }
   .hud-top { gap: 0.6em; left: 1em; right: 1em; top: 1em; }
-  .level-pill { font-size: 1.9em; }
-  .drop-btn { font-size: 2.7em; }
+  .drop-btn { font-size: 2.6em; }
   .hand { width: 7em; height: 7em; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hand, .speech.pop, .caption.pop, .drop-btn.ready, .card.celebrate { animation: none; }
+  .hand, .speech.pop, .caption.pop, .drop-btn, .drop-btn::after, .card.celebrate { animation: none; }
   .scene { transition: none; }
 }
 
@@ -439,71 +487,12 @@ html, body {
   --amber: #ffc65b;
 }
 .stage { border-radius: 0; }
-.hud-top { grid-template-columns: minmax(12em, 1fr) minmax(0, 3fr) minmax(12em, 1fr); top: 2.2em; left: 2.4em; right: 2.4em; gap: 2em; }
-/* The narration boxes (the instruction and the narrator's caption): translucent water, no
-   edge, white lettering with a soft shadow, and the key word in orange. Both sit in the top
-   band (they are never shown together). */
-.instruction, .caption {
-  width: max-content; max-width: 100%; min-width: 0; justify-self: center; text-align: center; line-height: 1.2;
-  font-size: 2.8em; font-weight: 700; padding: .3em .85em .36em;
-  color: #fff;
-  background: rgba(30, 150, 200, .38);
-  -webkit-backdrop-filter: blur(10px) saturate(1.4);
-  backdrop-filter: blur(10px) saturate(1.4);
-  border: 0;
-  border-radius: 1.4em;
-  box-shadow: inset 0 0 0 .08em rgba(255, 255, 255, .35), inset 0 .5em 1em rgba(255, 255, 255, .12), 0 .5em 1.6em rgba(5, 40, 70, .28);
-  text-shadow: 0 .07em .18em rgba(3, 30, 60, .75), 0 0 .6em rgba(3, 30, 60, .45);
-}
-.instruction .hl, .caption .em { color: #ffa03f; text-shadow: 0 .07em .18em rgba(60, 20, 0, .6); }
-.caption { top: 1.6em; padding: .34em 1em .4em; }
-.level-pill {
-  display: grid; grid-template-columns: auto auto; gap: .18em .5em;
-  padding: .45em .85em; border: .08em solid #d0ede7; border-radius: .9em;
-  background: var(--paper); font-size: 2.2em; margin: 0;
-  box-shadow: 0 .15em 0 #85b9ba, 0 .35em .8em #174c6320;
-}
-.level-pill::before { content: 'NET QUEST'; grid-column: 1 / -1; font-size: .48em; letter-spacing: .16em; color: #46828a; }
-.level-pill.say { animation: instruction-boing 0.55s cubic-bezier(0.2, 1.8, 0.4, 1); }
-.level-pill { grid-template-columns: auto auto auto; }
-.level-pill .caught { display: inline-flex; align-items: center; gap: .25em; margin-left: .5em; padding-left: .6em; border-left: .08em solid #c7e3dd; color: #dd6943; }
-.level-pill .caught svg { width: 1.25em; height: auto; }
-.level-pill .caught b { color: var(--ink); }
-.level-pill .caught.say { animation: instruction-boing 0.55s cubic-bezier(0.2, 1.8, 0.4, 1); }
-.level-progress { grid-column: 1 / -1; height: .2em; border-radius: 1em; background: #d8ece5; overflow: hidden; margin-top: .15em; }
-.level-progress::after { content: ''; display: block; width: var(--progress, 16.67%); height: 100%; background: #2db5a8; transition: width .4s ease; }
-.icon-btn { border-radius: 1.8em; border: .2em solid #d0ede7; background: var(--paper); color: var(--ink); box-shadow: 0 .35em 0 #85b9ba, 0 .6em 1.4em #174c6320; }
-.icon-btn:hover { background: #d9fff0; transform: translateY(-2px); }
-.drop-btn {
-  top: auto; bottom: 2.4em; right: 2.4em; transform: none;
-  font-size: 2.8em; padding: .6em 1em; border: .1em solid #fff2bc; border-radius: .9em;
-  background: linear-gradient(#ffe398, #ffc65b); color: #53421e;
-  box-shadow: 0 .18em 0 #b98230, 0 .5em 1em #174c6325;
-  min-height: 44px;
-  animation: rise-in .45s cubic-bezier(0.2, 1.6, 0.4, 1);
-}
+.hud-top { grid-template-columns: minmax(10em, 1fr) minmax(0, 3fr) minmax(10em, 1fr); top: 2.2em; left: 2.4em; right: 2.4em; gap: 2em; }
 /* the HUD's pieces drop into place when the game starts */
 .hud:not([hidden]) .hud-top > * { animation: rise-in .55s cubic-bezier(0.2, 1.6, 0.4, 1) backwards; }
 .hud:not([hidden]) .instruction { animation-delay: .1s; }
 .hud:not([hidden]) .hud-buttons { animation-delay: .2s; }
 @keyframes rise-in { from { opacity: 0; transform: translateY(1.2em) scale(.9); } }
-.drop-btn:disabled { filter: none; opacity: 1; color: #4b7078; background: #dfefeb; border-color: #f5fffa; box-shadow: 0 .18em 0 #85aeb0; }
-.drop-btn.ready { animation: rise-in .45s cubic-bezier(0.2, 1.6, 0.4, 1), ready-breathe 1.8s ease-in-out .5s infinite; }
-.drop-btn:not(:disabled):hover { filter: brightness(1.06); }
-.drop-btn:not(:disabled):active { transform: translateY(3px); }
-@keyframes ready-breathe { 50% { box-shadow: 0 .18em 0 #b98230, 0 0 0 .2em #fff4b84d, 0 .5em 1em #174c6325; } }
-.speech {
-  max-width: min(15em, 85%); font-size: 3em; line-height: 1.25; color: #fff;
-  background: rgba(30, 150, 200, .55);
-  -webkit-backdrop-filter: blur(10px) saturate(1.4);
-  backdrop-filter: blur(10px) saturate(1.4);
-  border: 0; box-shadow: inset 0 0 0 .08em rgba(255, 255, 255, .35), 0 .5em 1.2em rgba(5, 40, 70, .3);
-  text-shadow: 0 .07em .18em rgba(3, 30, 60, .75);
-}
-.speech .em { color: #ffa03f; text-shadow: 0 .07em .18em rgba(60, 20, 0, .6); }
-.speech::before { border-top-color: rgba(255, 255, 255, .35); }
-.speech::after { border-top-color: rgba(44, 150, 196, .9); }
-.caption { max-width: 80%; }
 .overlay { padding: 2em; background: #073b5766; backdrop-filter: blur(8px); }
 .overlay.complete { background: #073b5766; }
 .card, .card.celebrate {
@@ -514,29 +503,17 @@ html, body {
 .card h2, .card.celebrate h2 { color: var(--ink); font-size: 4.4em; }
 .card p { font-size: 2.3em; color: #4b7881; margin: .6em 0 1em; line-height: 1.4; }
 .card-kicker { display: block; color: #298f8e; font-size: 1.7em; letter-spacing: .18em; margin-bottom: .7em; font-weight: 700; }
-.btn { border-radius: .8em; border: .1em solid #b6dcd5; color: var(--ink); background: #e3f3ee; box-shadow: 0 .16em 0 #90b5b4; }
-.btn.primary, .card.celebrate .btn.primary { background: linear-gradient(#ffe398, #ffc65b); border-color: #ffedb2; color: #53421e; box-shadow: 0 .16em 0 #b98230; }
-.btn:hover { filter: brightness(1.06); transform: translateY(-2px); }
-.btn:focus-visible, .icon-btn:focus-visible, .drop-btn:focus-visible { outline-color: #176479; }
 @container (max-width: 720px) {
   .hud-top { grid-template-columns: 1fr auto; gap: 1em; top: 1.4em; left: 1.4em; right: 1.4em; }
-  .level-pill { grid-column: 1; font-size: 1.8em; }
   .hud-buttons { grid-column: 2; grid-row: 1; }
-  .instruction { position: absolute; top: 0; left: 20%; width: 52%; font-size: 1.9em; padding: .55em .8em; }
-  .caption { top: 25%; font-size: 2.2em; max-width: 88%; }
-  .speech { font-size: 2.3em; }
-  .drop-btn { font-size: 2.2em; }
   .card, .card.celebrate { padding: 2em; }
   .card.celebrate .net-icon { width: 8em; }
   .card h2, .card.celebrate h2 { font-size: 3.2em; }
   .card p, .card.celebrate p { font-size: 2.2em; }
 }
 @container (max-width: 440px) {
-  .instruction { top: 8em; left: 6%; width: 88%; font-size: 1.7em; }
-  .level-pill { font-size: 1.6em; }
   .card, .card.celebrate { padding: 1.2em; border-radius: 1.8em; }
   .card-kicker { font-size: 1.3em; }
-  .btn { font-size: 2em; padding: .4em .9em; }
   .card.celebrate .net-icon { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -547,17 +524,16 @@ html, body {
 .card, .card.celebrate {
   background: url('../assets/generated/panel.png') center / 100% 100% no-repeat;
   border: 0; border-radius: 3em; padding: 10em 7em 9.5em;
-  box-shadow: 0 1.5em 4em #073b5750;
+  box-shadow: none;
+  filter: drop-shadow(0 1.2em 2.4em rgba(7, 59, 87, 0.35));
 }
 @container (max-width: 720px) {
   .hud-top { grid-template-columns: auto minmax(0,1fr) auto; gap: 1.2em; }
-  .instruction { position: static; grid-column: 2; grid-row: 1; width: auto; font-size: 1.7em; }
   .hud-buttons { grid-column: 3; }
   .card, .card.celebrate { padding: 3em; }
 }
 @container (max-width: 440px) {
   .hud-top { gap: .8em; }
-  .instruction { font-size: 1.5em; padding: .6em; }
   .card, .card.celebrate { padding: 2.5em; }
   .card p { margin: .3em 0; }
 }
@@ -570,64 +546,12 @@ html, body {
 .card, .card.celebrate { padding: 13% 9% 12%; }
 @container (max-width: 720px) { .card, .card.celebrate { padding: 13% 9% 12%; } }
 @container (max-width: 440px) { .card, .card.celebrate { padding: 13% 9% 12%; } }
-/* Check and Drop Net share the bottom-right corner: Check while solving, Drop Net once the
-   net is right. */
-.actions { position: absolute; right: 2.4em; bottom: 2.4em; display: flex; gap: 1em; align-items: center; pointer-events: none; }
-.actions > button { pointer-events: auto; }
-.actions .drop-btn { position: static; }
-.check-btn {
-  display: inline-flex; align-items: center; gap: .4em;
-  font: inherit; font-size: 2.8em; font-weight: 700; padding: .6em 1.1em .6em .9em;
-  border: .1em solid #d9fff3; border-radius: .9em; cursor: pointer; min-height: 44px;
-  background: linear-gradient(#5ee3c7, #1fb49b); color: #0b3d36;
-  box-shadow: 0 .18em 0 #0e7d6b, 0 .5em 1em #174c6325;
-  animation: rise-in .45s cubic-bezier(0.2, 1.6, 0.4, 1);
-}
-.check-btn svg { width: 1.2em; height: auto; }
-.check-btn[hidden] { display: none; }
-.check-btn:disabled { cursor: default; filter: saturate(.5) brightness(.95); }
-.check-btn:not(:disabled):hover { filter: brightness(1.06); }
-.check-btn:not(:disabled):active { transform: translateY(3px); box-shadow: 0 .02em 0 #0e7d6b; }
-.check-btn:focus-visible { outline: .25em solid #fff; outline-offset: .2em; }
 .card.celebrate p.say { animation: instruction-boing 0.55s cubic-bezier(0.2, 1.8, 0.4, 1); }
-@container (max-width: 720px) { .check-btn { font-size: 2.2em; } .actions { gap: .6em; } }
-/* Chunky game buttons: a glossy face, a dark outline and a solid lip underneath that the
-   button presses down onto. */
-.icon-btn {
-  border-radius: 1.3em; border: .16em solid #0d5d6b; color: #0d5d6b;
-  background: linear-gradient(#ffffff, #d6f3f6 55%, #bfe8ee);
-  box-shadow: 0 .42em 0 #0d5d6b, 0 .8em 1.2em rgba(0, 30, 60, .28), inset 0 .16em 0 #fff;
-  transition: transform .08s ease, box-shadow .08s ease;
-}
-.icon-btn:hover { background: linear-gradient(#ffffff, #e4fafb 55%, #cdeff3); transform: none; }
-.icon-btn:active { transform: translateY(.32em) scale(1); box-shadow: 0 .1em 0 #0d5d6b, 0 .3em .6em rgba(0, 30, 60, .28), inset 0 .16em 0 #fff; }
-.check-btn, .drop-btn, .btn {
-  border-radius: 1em; font-weight: 800; letter-spacing: .01em;
-  text-shadow: 0 .05em 0 rgba(255, 255, 255, .45);
-  transition: transform .08s ease, box-shadow .08s ease, filter .2s ease;
-}
-.check-btn {
-  border: .14em solid #0b4f45; color: #073a33;
-  background: linear-gradient(#8ef5d8, #2ec4a6 55%, #169b84);
-  box-shadow: 0 .4em 0 #0b4f45, 0 .8em 1.2em rgba(0, 30, 60, .28), inset 0 .16em 0 rgba(255, 255, 255, .6);
-}
-.check-btn:not(:disabled):hover { filter: brightness(1.05); }
-.check-btn:not(:disabled):active { transform: translateY(.3em); box-shadow: 0 .1em 0 #0b4f45, 0 .3em .6em rgba(0, 30, 60, .28), inset 0 .16em 0 rgba(255, 255, 255, .6); }
-.check-btn:disabled { filter: none; opacity: .75; }
-.drop-btn {
-  border: .14em solid #7a4a08; color: #4a2d06;
-  background: linear-gradient(#ffe9a8, #ffc24f 55%, #f5a623);
-  box-shadow: 0 .4em 0 #7a4a08, 0 .8em 1.2em rgba(0, 30, 60, .28), inset 0 .16em 0 rgba(255, 255, 255, .6);
-}
-.drop-btn:not(:disabled):active { transform: translateY(.3em); box-shadow: 0 .1em 0 #7a4a08, 0 .3em .6em rgba(0, 30, 60, .28), inset 0 .16em 0 rgba(255, 255, 255, .6); }
-.drop-btn:disabled {
-  opacity: 1; filter: none; color: #5f7580; border-color: #5f7580;
-  background: linear-gradient(#edf3f5, #cfdbe0 55%, #bccbd2);
-  box-shadow: 0 .4em 0 #5f7580, 0 .6em 1em rgba(0, 30, 60, .2), inset 0 .16em 0 rgba(255, 255, 255, .6);
-}
-@keyframes ready-breathe { 50% { box-shadow: 0 .4em 0 #7a4a08, 0 0 0 .3em rgba(255, 226, 140, .55), 0 .8em 1.6em rgba(240, 138, 29, .55), inset 0 .16em 0 rgba(255, 255, 255, .6); } }
-.btn { border: .12em solid #0d5d6b; color: #0d5d6b; background: linear-gradient(#ffffff, #d6f3f6 55%, #bfe8ee); box-shadow: 0 .32em 0 #0d5d6b, 0 .6em 1em rgba(0, 30, 60, .25); }
-.btn.primary, .card.celebrate .btn.primary { border-color: #7a4a08; color: #4a2d06; background: linear-gradient(#ffe9a8, #ffc24f 55%, #f5a623); box-shadow: 0 .32em 0 #7a4a08, 0 .6em 1em rgba(0, 30, 60, .25); }
-.btn:hover { transform: none; filter: brightness(1.05); }
-.btn:active { transform: translateY(.24em); filter: none; box-shadow: 0 .08em 0 #0d5d6b; }
-.btn.primary:active, .card.celebrate .btn.primary:active { box-shadow: 0 .08em 0 #7a4a08; }
+/* Card text never shrinks below a phone-readable size. */
+.card h2, .card.celebrate h2 { font-size: max(4.4em, 22px); }
+.card p, .card.celebrate p { font-size: max(2.3em, 14px); }
+/* The instruction stays centred on the stage at every size: both side columns are at least
+   as wide as the sound and pause buttons, so it never leans toward one side or touches them. */
+.hud-top { grid-template-columns: minmax(96px, 1fr) minmax(0, 3fr) minmax(96px, 1fr); }
+.instruction { grid-column: 2; grid-row: 1; }
+.hud-buttons { grid-column: 3; grid-row: 1; }

@@ -14,6 +14,7 @@ const IMAGE = { size: 1254, foot: [256, 1190], exit: [1205, 190], axle: [79, 930
 const S = 0.35;                        // image pixels to stage pixels, the same both ways
 const FOOT = { x: 170, y: -38 };       // where the pedestal stands on the deck
 const ROPE_REST = 36;                  // rope hanging below the pulley with nothing paid out
+const TUCK = 30;                       // wound up between nets, the ring is drawn this far up
 const DRUM_R = IMAGE.coil.ry * S;
 // A dedicated generated braid, sampled between matching twist phases.
 const ROPE_STRIP = { x: 530, y: 170, w: 190, h: 842 };
@@ -50,6 +51,12 @@ class Winch {
   setRopeOut(length) {
     this.angle += (length - this.ropeOut) / DRUM_R;
     this.ropeOut = length;
+  }
+
+  // Gathering the net into a bundle (or opening it) takes in (or pays out) rope beyond the
+  // ring's own travel: the drum, and Popo's wheel with it, turns for that rope too.
+  turn(length) {
+    this.angle += length / DRUM_R;
   }
 
   draw(ctx) {
@@ -111,5 +118,5 @@ function drawRing(ctx, x, y) {
   ctx.drawImage(assets.ropeConnector, x-w/2, y-156/1536*h, w, h);
 }
 
-Object.assign(PopoGame, { Winch, drawRope, drawRing, RING_DEPTH });
+Object.assign(PopoGame, { Winch, drawRope, drawRing, RING_DEPTH, TUCK });
 })(window.PopoGame = window.PopoGame || {});

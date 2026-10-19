@@ -17,6 +17,12 @@ const side = (name) => [corner(name[0]), corner(name[1])];
 // degrees of angle, and a third of a metre between the halves of a diagonal
 const TOLERANCE = { parallel: 0.06, metres: 0.25, degrees: 3, halves: 0.3 };
 const GLOW = '#8ff7a8';
+// Wound up, the net gathers under its ring: a tenth as wide and under half as long, hanging
+// from the knot where the sling meets.
+const GATHER = { x: 0.9, y: 0.55 };
+const KNOT = RING_DEPTH - 4;
+// the outline of a torn hole, as shares of its full size, all the way round
+const RAGGED = [1, 0.62, 0.9, 0.7, 1, 0.58, 0.86, 0.66, 0.97, 0.6, 0.92, 0.72, 1, 0.64, 0.84, 0.7];
 const INK = 'rgba(12, 40, 70, 0.9)';
 const FONT = (px) => `700 ${px}px Fredoka, "Arial Rounded MT Bold", sans-serif`;
 
@@ -58,6 +64,9 @@ class Net {
     this.touched = false; // the child has moved the corner this level
     this.textScale = 1;   // labels grow on small screens so they stay readable (see Game.resize)
     this.ropePhase = 0;   // rope twists slide as rope pays out
+    this.furl = 0;        // 0 open, 1 wound up into a bundle under the ring (between nets)
+    this.tear = 0;        // 0 whole, 1 torn open by a catch a wrong net couldn't hold
+    this.burst = null;    // bits of mesh flying off as it tears: { t } seconds
     this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
@@ -96,10 +105,31 @@ class Net {
 
   toStage(p) {
     const r = this.ring();
-    if (!this.swing) return { x: r.x + p.x, y: r.y + p.y };
+    const q = this.furl ? this.gathered(p) : p;
+    if (!this.swing) return { x: r.x + q.x, y: r.y + q.y };
     const c = Math.cos(this.swing);
     const s = Math.sin(this.swing);
-    return { x: r.x + p.x * c - p.y * s, y: r.y + p.x * s + p.y * c };
+    return { x: r.x + q.x * c - q.y * s, y: r.y + q.x * s + q.y * c };
+  }
+
+  // Where a point of the frame is drawn as the net winds up. Only the drawing gathers: the
+  // frame keeps its shape, and the net is never wound up while catching, so toNet ignores it.
+  gathered(p) {
+    return { x: p.x * (1 - GATHER.x * this.furl), y: KNOT + (p.y - KNOT) * (1 - GATHER.y * this.furl) };
+  }
+
+  // The hole the catch tears: low in the middle of the mesh (the frame holds), growing with
+  // the tear.
+  tearHole() {
+    const [a, b, c, d] = this.points;
+    const centre = lerp(midpoint(midpoint(a, b), midpoint(c, d)), midpoint(c, d), 0.25);
+    const rx = distance(midpoint(a, d), midpoint(b, c)) * 0.34 * this.tear;
+    const ry = distance(midpoint(a, b), midpoint(d, c)) * 0.3 * this.tear;
+    const outline = RAGGED.map((k, i) => {
+      const t = (i / RAGGED.length) * TAU;
+      return { x: centre.x + Math.cos(t) * rx * k, y: centre.y + Math.sin(t) * ry * k };
+    });
+    return { centre, outline };
   }
 
   toNet(p) {
@@ -160,7 +190,7 @@ class Net {
     this.points[this.movable] = { x: p.x, y: p.y };
   }
 
-  // The frame as its parallelogram, held still (how the first net arrives).
+  // The frame as its solved parallelogram, held still.
   showSolved() {
     this.points = this.solved.map((p) => ({ ...p }));
     this.locked = true;
@@ -272,6 +302,7 @@ class Net {
     if (this.flash > 0) this.flash = Math.max(0, this.flash - dt / 0.7);
     if (this.hintPulse > 0) this.hintPulse = Math.max(0, this.hintPulse - dt);
     if (this.glow && (this.glow.t += dt) >= this.glow.steps.length * this.glow.each) this.glow = null;
+    if (this.burst && (this.burst.t += dt) > 0.7) this.burst = null;
   }
 
   // --- drawing --------------------------------------------------------------------
@@ -304,7 +335,7 @@ class Net {
 
   drawAll(ctx, ring, pulley, wet) {
     const corners = this.points.map((p) => this.toStage(p));
-    const showing = !this.locked || this.glow;
+    const showing = !this.furl && (!this.locked || this.glow);
     ctx.save();
     ctx.globalAlpha = this.alpha * (wet ? 0.9 : 1);
     ctx.lineCap = 'round';
@@ -313,7 +344,7 @@ class Net {
     // the lifting rope down from the boom's pulley to the ring, and the sling from the ring
     // to the top corners that carries the whole frame: the machine's painted rope, tiled
     drawRope(ctx, pulley, { x: ring.x, y: ring.y + 4 }, 11, this.ropePhase);
-    const knot = { x: ring.x, y: ring.y + RING_DEPTH - 4 };
+    const knot = { x: ring.x, y: ring.y + KNOT };
     drawRope(ctx, knot, corners[0], 7);
     drawRope(ctx, knot, corners[1], 7);
     drawRing(ctx, ring.x, ring.y);
@@ -341,7 +372,13 @@ class Net {
     }
     if (showing) this.drawMeasurements(ctx, corners);
     if (this.glow) this.drawGlow(ctx, corners);
-    this.drawCorners(ctx, corners, wet);
+    if (this.furl < 1) {
+      // the eyelets fold away into the bundle as the net winds up
+      ctx.save();
+      ctx.globalAlpha *= 1 - this.furl;
+      this.drawCorners(ctx, corners, wet);
+      ctx.restore();
+    }
     if (showing) this.drawLabels(ctx, corners);
     ctx.restore();
   }
@@ -421,8 +458,64 @@ class Net {
     ctx.save();
     ctx.translate(r.x, r.y);
     ctx.rotate(this.swing);
+    if (this.furl) {
+      // gathered as in gathered(): narrowed about the ring, shortened toward the knot
+      ctx.translate(0, KNOT);
+      ctx.scale(1 - GATHER.x * this.furl, 1 - GATHER.y * this.furl);
+      ctx.translate(0, -KNOT);
+    }
     if (wet) ctx.filter = 'saturate(.7) brightness(.88)';
+    if (!this.tear) {
+      ctx.drawImage(this.textureCanvas, b.left, b.top, b.width, b.height);
+      ctx.restore();
+      return;
+    }
+    // torn: the mesh is drawn everywhere but the hole (the box and the hole's outline, filled
+    // even-odd), and broken strands hang into it
+    const hole = this.tearHole();
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(b.left, b.top, b.width, b.height);
+    hole.outline.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+    ctx.closePath();
+    ctx.clip('evenodd');
     ctx.drawImage(this.textureCanvas, b.left, b.top, b.width, b.height);
+    ctx.restore();
+    // frayed ends all round the edge, drooping, each dark-edged so it reads over sea and sky
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    hole.outline.forEach((q, i) => {
+      const end = lerp(q, hole.centre, i % 2 ? 0.16 : 0.3);
+      ctx.moveTo(q.x, q.y);
+      ctx.quadraticCurveTo((q.x + end.x) / 2, (q.y + end.y) / 2 + 5, end.x, end.y + 10);
+    });
+    ctx.lineWidth = 4.6;
+    ctx.strokeStyle = '#5a3a14';
+    ctx.stroke();
+    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = '#e0b060';
+    ctx.stroke();
+    if (this.burst) {
+      // bits flung out as it tears, falling and fading
+      const t = this.burst.t;
+      ctx.globalAlpha *= 1 - t / 0.7;
+      ctx.beginPath();
+      for (let i = 0; i < 12; i += 1) {
+        const a = (i / 12) * TAU + i;
+        const v = 160 + (i % 4) * 35;
+        const x = hole.centre.x + Math.cos(a) * v * t;
+        const y = hole.centre.y + Math.sin(a) * v * t + 520 * t * t;
+        const spin = a + t * 9;
+        ctx.moveTo(x - Math.cos(spin) * 7, y - Math.sin(spin) * 7);
+        ctx.lineTo(x + Math.cos(spin) * 7, y + Math.sin(spin) * 7);
+      }
+      ctx.lineWidth = 4.6;
+      ctx.strokeStyle = '#5a3a14';
+      ctx.stroke();
+      ctx.lineWidth = 2.4;
+      ctx.strokeStyle = '#e0b060';
+      ctx.stroke();
+    }
     ctx.restore();
   }
 

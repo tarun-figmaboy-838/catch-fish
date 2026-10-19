@@ -102,9 +102,6 @@ const STORY = {
     { who: 'narrator', text: 'And today…' },
     { who: 'narrator', text: 'he wants to catch *all* kinds of fish!', cue: { word: 4, do: 'fishIn' } },
   ],
-  // said over the first net, which arrives as a parallelogram before a corner slips
-  rule: { who: 'narrator', text: 'A parallelogram has *two pairs* of parallel sides!' },
-  drop: 'Drop the *net*!',
   catch: { who: 'popo', text: '*Great* catch!', cue: { word: 0, do: 'hop' } },
   complete: { who: 'popo', text: 'We caught them *all*!', cue: { word: 0, do: 'hop' } },
   // the final card: the title, then the properties one at a time

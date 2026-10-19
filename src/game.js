@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, spawnFish, spawnSchool, refreshShadows, LOCATIONS, LEVELS, schoolFor, Popo, Winch, Net, opening, startLevels, settleCorner, checkAnswer, dropNet, Cancelled, STAGE_W, STAGE_H, SCENE_SHIFT, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
+const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, spawnFish, spawnSchool, refreshShadows, LOCATIONS, LEVELS, schoolFor, Popo, Winch, Net, TUCK, opening, startLevels, settleCorner, dropNet, Cancelled, STAGE_W, STAGE_H, SCENE_SHIFT, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
 
 const HINT_REPEAT = 7;    // seconds of idling between hints once one has been shown
 const NET_CLEARANCE = 40; // the net's bottom edge hangs this far above the water
@@ -115,7 +115,6 @@ class Game {
     this.ui.showComplete(false);
     this.ui.hideHand();
     this.ui.showHandle(false);
-    this.ui.setCheck('hidden');
     this.ui.setDrop('hidden');
     const muted = state.muted;
     resetProgress();
@@ -125,6 +124,10 @@ class Game {
     this.winch = new Winch();
     this.net = new Net();
     this.net.textScale = this.labelScale();
+    // until Popo lets it down, the net hangs wound up in a bundle under the boom's pulley
+    this.net.visible = true;
+    this.net.furl = 1;
+    this.winch.setRopeOut(-TUCK);
     this.ambient = [];
     this.leapers = [];
     this.hop = null;
@@ -194,8 +197,6 @@ class Game {
       top, bottom: top + (span.bottom - span.top) - 40,
     };
     this.hintShown = false;
-    this.ui.setLevel(index, LEVELS.length);
-    this.ui.setCaught(state.banked);
     return before;
   }
 
@@ -212,18 +213,6 @@ class Game {
     this.audio.play('bloop');
   }
 
-  // The net takes its next shape: every corner glides from where it was to its new place.
-  async morphNet(before, token) {
-    const net = this.net;
-    const after = net.points.map((p) => ({ ...p }));
-    net.locked = true;
-    await clock.tween(650, token, (t) => {
-      const k = ease.inOut(t);
-      net.points = after.map((p, i) => ({ x: before[i].x + (p.x - before[i].x) * k, y: before[i].y + (p.y - before[i].y) * k }));
-    });
-    net.points = after;
-  }
-
   beginPuzzle() {
     const level = LEVELS[state.level];
     state.phase = PHASE.PUZZLE_READY;
@@ -233,8 +222,8 @@ class Game {
     this.lastTick = { value: this.net.liveValue(), at: 0 };
     this.popo.idle();
     this.ui.showHandle(true);
-    this.ui.setCheck('ready');
-    this.ui.setDrop('disabled');
+    this.ui.setDrop('on');
+    this.wasRight = false;
     this.ui.setInstruction(level.prompt);
     this.speak(level.prompt);
   }
@@ -305,7 +294,7 @@ class Game {
     this.audio.play('tick');
   }
 
-  // Let go near its place, the corner settles onto it; the child still presses Check.
+  // Let go near its place, the corner settles onto it; the child still presses Drop Net.
   onDragEnd() {
     if (state.phase !== PHASE.DRAGGING) return;
     this.drag = null;
@@ -323,13 +312,9 @@ class Game {
     this.tickMeasure();
   }
 
-  onCheck() {
-    if (state.paused || state.phase !== PHASE.PUZZLE_READY || this.net.settling) return;
-    checkAnswer(this);
-  }
-
+  // Drop Net, right or wrong: a wrong net goes down all the same (see dropNet).
   onDrop() {
-    if (state.paused || state.phase !== PHASE.DROP_READY) return;
+    if (state.paused || state.phase !== PHASE.PUZZLE_READY || this.net.settling) return;
     this.stopHint();
     this.audio.play('ui');
     dropNet(this);
@@ -489,36 +474,36 @@ class Game {
   // --- hints ------------------------------------------------------------------
   // Left alone for a while: on the first net the hand shows the drag once, along the way to
   // where the corner belongs; later nets swell their measurements instead, so the child
-  // reasons rather than copies. Once the net is ready, the hand taps on Drop Net. Any touch
+  // reasons rather than copies. Once the frame is right, the hand taps on Drop Net. Any touch
   // cancels a hint.
   updateHint(dt) {
-    const puzzle = state.phase === PHASE.PUZZLE_READY;
-    if (!puzzle && state.phase !== PHASE.DROP_READY) return;
+    if (state.phase !== PHASE.PUZZLE_READY) return;
     if (this.hint) {
-      if (this.hint.hand && puzzle) this.advanceHand(dt);
+      if (this.hint.drag) this.advanceHand(dt);
       else if ((this.hint.t += dt) > 2.4) { this.stopHint(); state.idleTime = 0; }
       return;
     }
     state.idleTime += dt;
-    const delay = this.hintShown ? HINT_REPEAT : puzzle ? LEVELS[state.level].hintDelay : 4;
-    if (state.idleTime > delay) this.showHint(puzzle);
+    const ready = this.net.check().ok;
+    const delay = this.hintShown ? HINT_REPEAT : ready ? 4 : LEVELS[state.level].hintDelay;
+    if (state.idleTime > delay) this.showHint(ready);
   }
 
-  showHint(puzzle) {
-    const hand = !puzzle || state.level === 0;
-    this.hint = { t: 0, hand };
+  showHint(ready) {
+    const drag = !ready && state.level === 0;
+    this.hint = { t: 0, drag };
     this.ui.pulseInstruction();
     this.audio.play('hint');
-    if (!puzzle) {
+    if (ready) {
       const d = this.ui.dropPoint();
       this.ui.moveHand(d.x - 8, d.y - 6);
       this.ui.showHand(false);
-    } else if (hand) {
+    } else if (drag) {
       this.ui.showHand(true);
     } else {
       this.net.hintPulse = 2.4;
     }
-    if (puzzle && !this.hintShown) this.speak(LEVELS[state.level].prompt);
+    if (!ready && !this.hintShown) this.speak(LEVELS[state.level].prompt);
     this.hintShown = true;
   }
 
@@ -609,7 +594,8 @@ class Game {
     });
     d.elapsed = 0;
     d.voiced = true;
-    d.hold = Math.max(450, (seconds - d.times[d.times.length - 1]) * 1000 + 550);
+    // after the voice ends, the line stays long enough for a young reader to finish it
+    d.hold = (seconds - d.times[d.times.length - 1]) * 1000 + Math.max(1200, d.words.length * 170);
   }
 
   placeSpeech() {
@@ -911,11 +897,19 @@ class Game {
     net.drop = winch.ropeOut;
     net.ropePhase = winch.ropeOut;
     popo.setMachine(winch);
-    // hanging on its sling, the net sways a touch while it waits; it holds still for a drag
-    const idle = state.phase === PHASE.PUZZLE_READY || state.phase === PHASE.CORRECT || state.phase === PHASE.DROP_READY;
-    if (idle && !this.fx.reduced) net.swing = Math.sin(this.fx.t * 0.9) * 0.008;
+    // hanging on its sling, the net sways a touch while it waits (easing into it, never with a
+    // jump); it holds still for a drag
+    const idle = state.phase === PHASE.PUZZLE_READY || state.phase === PHASE.CORRECT;
+    if (idle && !this.fx.reduced) net.swing += (Math.sin(this.fx.t * 0.9) * 0.008 - net.swing) * Math.min(1, dt * 2);
     else if (state.phase === PHASE.DRAGGING) net.swing *= Math.max(0, 1 - dt * 6);
     net.update(dt);
+    // Drop Net glows, with a chime, while the frame is right
+    if (state.phase === PHASE.PUZZLE_READY || state.phase === PHASE.DRAGGING) {
+      const right = net.check().ok;
+      if (right && !this.wasRight) this.audio.play('ready');
+      this.wasRight = right;
+      this.ui.setDrop(right ? 'ready' : 'on');
+    }
 
     for (const f of state.fish) {
       if (f.gone) continue;

@@ -56,7 +56,7 @@ class Popo {
     this.reaction = null;
   }
 
-  // A short take: 'happy' and 'laugh' bounce on the seat, 'think' tilts the head, 'gasp' sits up.
+  // A short take: 'happy' and 'laugh' bounce on the seat, 'think' tilts the head.
   react(name, seconds = 0.9) {
     this.reaction = { name, left: seconds, length: seconds };
     this.squash = name === 'think' ? 0 : 0.08;

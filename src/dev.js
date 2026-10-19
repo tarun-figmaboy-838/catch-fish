@@ -4,7 +4,7 @@
 // Number keys 1–9 and 0 press the buttons in order; ` folds the panel away.
 if (new URLSearchParams(location.search).get('dev') !== '1') return;
 
-const { state, PHASE, LEVELS, checkAnswer, rowTo, celebrate, newToken } = PopoGame;
+const { state, PHASE, LEVELS, rowTo, celebrate, letNetDown, newToken } = PopoGame;
 
 function game() {
   return window.popoDebug && window.popoDebug.game;
@@ -31,7 +31,8 @@ function level(index) {
   g.applyLocation();
   g.prepareLevel(index);
   g.spawnSchool();
-  g.net.visible = true;
+  g.net.furl = 0;
+  g.winch.setRopeOut(0);
   g.beginPuzzle();
 }
 
@@ -49,19 +50,20 @@ const JUMPS = [
     const g = game();
     if (state.phase !== PHASE.PUZZLE_READY) level(state.level);
     g.net.setHandle(g.net.target);
-    checkAnswer(g);
   }],
-  ['Drop', () => { const g = game(); if (state.phase === PHASE.DROP_READY) g.onDrop(); }],
+  ['Drop', () => game().onDrop()],
   ['Row on', () => {
     const g = game();
     begin(g);
     const from = Math.min(state.locationIndex, 2);
     state.locationIndex = from;
     g.applyLocation();
-    g.net.visible = true;
     const token = newToken();
     state.phase = PHASE.TRANSITIONING;
-    rowTo(g, from + 1, token).then(() => { g.prepareLevel(state.level); g.spawnSchool(); g.beginPuzzle(); }).catch(() => {});
+    rowTo(g, from + 1, token)
+      .then(() => { g.prepareLevel(state.level); g.spawnSchool(); return letNetDown(g, token); })
+      .then(() => g.beginPuzzle())
+      .catch(() => {});
   }],
   ['Finish', () => { const g = game(); level(LEVELS.length - 1); celebrate(g, newToken()).catch(() => {}); }],
 ];

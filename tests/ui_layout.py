@@ -20,7 +20,7 @@ with sync_playwright() as p:
             assert box and box['x'] >= stage['x'] - 1 and box['y'] >= stage['y'] - 1, (selector, box)
             assert box['x'] + box['width'] <= stage['x'] + stage['width'] + 1, (selector, box)
             assert box['y'] + box['height'] <= stage['y'] + stage['height'] + 1, (selector, box)
-        for selector in ['#level', '#instruction', '#btn-pause', '#btn-sound', '#btn-check', '#btn-drop']:
+        for selector in ['#instruction', '#btn-pause', '#btn-sound', '#btn-drop']:
             contained(selector)
         page.click('#btn-sound')
         assert page.locator('#btn-sound').get_attribute('aria-pressed') == 'false'

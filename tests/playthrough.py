@@ -1,11 +1,12 @@
 """End-to-end playthrough in headless Chromium: python3 tests/playthrough.py
 
-Plays all eight nets with real pointer drags and the Check and Drop Net buttons. Checks that a
-wrong Check leaves the puzzle open with a hint, that dragging the corner to its place and
-pressing Check locks an exact answer (also through a window resize mid-drag), that Drop Net
-arms only then, that every fish of every level is netted, that waters change, that pause
-freezes the game, that the final card appears and tells the hosting page, and that Play Again
-starts over. Fails on any console error.
+Plays all eight nets with real pointer drags and the Drop Net button. Checks that a wrong net
+dropped anyway loses its catch (the fish tear out and swim on) and comes back mended as the
+child left it, with a hint; that Drop Net glows once the corner is dragged to its place (also
+through a window resize mid-drag), and then locks the exact answer with its praise; that every
+fish of every level is netted, that waters change, that pause freezes the game, that the final
+card appears and tells the hosting page, and that Play Again starts over. Fails on any console
+error.
 """
 import time
 from pathlib import Path
@@ -16,8 +17,8 @@ URL = (ROOT / 'index.html').as_uri() + '?debug'
 
 STATE = '''() => { const s = window.popoDebug.state, g = window.popoDebug.game;
   return { phase: s.phase, level: s.level, loc: s.locationIndex, caught: s.caught, paused: s.paused, misses: s.misses,
-           checkHidden: document.getElementById('btn-check').hidden, dropHidden: document.getElementById('btn-drop').hidden,
-           dropDisabled: document.getElementById('btn-drop').disabled,
+           dropHidden: document.getElementById('btn-drop').hidden, dropReady: document.getElementById('btn-drop').classList.contains('ready'),
+           swimming: s.fish.filter((f) => !f.gone && !f.caught && !f.frozen).length, furl: g.net.furl, tear: g.net.tear,
            complete: !document.getElementById('overlay-complete').hidden, start: !document.getElementById('screen-start').hidden,
            ok: g.net.check().ok, locked: g.net.locked, fish: s.fish.length,
            instruction: document.getElementById('instruction-text').textContent }; }'''
@@ -82,10 +83,10 @@ def play():
         page.evaluate('() => { window.completed = null; window.addEventListener("popo:complete", (e) => { window.completed = e.detail; }); }')
         page.click('#btn-play', force=True)
         st = wait_for(page, lambda s: s['phase'] == 'puzzleReady', 60, 'the first net')
-        check(st['level'] == 0 and st['fish'] == 3 and not st['checkHidden'] and st['dropDisabled'],
-              'the first net is ready with its school, Check showing and Drop Net disabled')
+        check(st['level'] == 0 and st['fish'] == 3 and not st['dropHidden'] and not st['dropReady'],
+              'the first net is ready with its school and Drop Net there to try, not glowing')
 
-        levels = page.evaluate('() => PopoGame.LEVELS.map((l) => ({ fish: l.fish, location: l.location, prompt: l.prompt.replace(/\\*/g, "") }))')
+        levels = page.evaluate('() => PopoGame.LEVELS.map((l) => ({ fish: l.fish, location: l.location, prompt: l.prompt.replace(/\\*/g, ""), praise: l.praise.replace(/\\*/g, "") }))')
         for i, level in enumerate(levels):
             st = wait_for(page, lambda s, i=i: s['phase'] == 'puzzleReady' and s['level'] == i, 30, f'level {i + 1}')
             check(st['loc'] == level['location'] and st['fish'] == level['fish'], f'level {i + 1}: in its waters with {level["fish"]} fish')
@@ -93,20 +94,22 @@ def play():
             check(not st['ok'], f'level {i + 1}: starts without the property')
 
             if i == 0:
-                # a wrong answer: Check says so, keeps the net as it is, and the puzzle stays open
-                page.click('#btn-check')
-                st = wait_for(page, lambda s: s['phase'] == 'checking', 3, 'checking')
-                st = wait_for(page, lambda s: s['phase'] == 'puzzleReady', 8, 'the puzzle to reopen')
-                check(st['misses'] == 1 and not st['locked'] and not st['checkHidden'], 'a wrong Check wobbles, hints and leaves the puzzle open')
+                # a wrong net dropped anyway: down it goes, the catch tears out, and it comes back mended
+                page.click('#btn-drop')
+                st = wait_for(page, lambda s: s['phase'] == 'netLowering', 3, 'the wrong net to lower')
+                st = wait_for(page, lambda s: s['phase'] == 'netBreaking', 12, 'the catch to break out')
+                st = wait_for(page, lambda s: s['tear'] == 1, 5, 'the net to tear')
+                st = wait_for(page, lambda s: s['phase'] == 'puzzleReady', 15, 'the mended net')
+                check(st['misses'] == 1 and st['caught'] == 0 and st['swimming'] == 3 and not st['ok'] and not st['locked']
+                      and st['furl'] == 0 and st['tear'] == 0 and st['instruction'] == level['prompt'] and not st['dropHidden'],
+                      'a wrong net dropped anyway loses its catch, comes back mended as it was, and the puzzle reopens')
 
             drag(page, page.evaluate(POINTS)['target'], resize_at=12 if i == 1 else None)
             if i == 1:
                 page.set_viewport_size({'width': 1280, 'height': 720})
                 page.wait_for_timeout(200)
-            check(state(page)['ok'], f'level {i + 1}: the corner is in its place before Check')
-            page.click('#btn-check')
-            st = wait_for(page, lambda s: s['phase'] in ('correct', 'dropReady'), 6, 'the correct check')
-            check(st['locked'], f'level {i + 1}: Check locks the answer')
+            st = state(page)
+            check(st['ok'] and st['dropReady'], f'level {i + 1}: the corner is in its place and Drop Net glows')
 
             if i == 0:
                 page.evaluate('() => window.popoDebug.game.togglePause()')
@@ -115,11 +118,11 @@ def play():
                 check(page.evaluate('() => PopoGame.clock.time') == before and state(page)['paused'], 'pause freezes the game')
                 page.evaluate('() => window.popoDebug.game.togglePause()')
 
-            st = wait_for(page, lambda s: s['phase'] == 'dropReady', 15, 'Drop Net to arm')
-            check(not st['dropDisabled'] and st['checkHidden'], f'level {i + 1}: Drop Net is armed and Check is gone once the answer is right')
             caught = st['caught']
             page.click('#btn-drop')
-            st = wait_for(page, lambda s: s['phase'] == 'netLowering', 3, 'the net to lower')
+            st = wait_for(page, lambda s, p=level['praise']: s['phase'] == 'correct' and s['instruction'] == p, 4, 'the right frame to lock with its praise')
+            check(st['locked'], f'level {i + 1}: Drop Net locks the answer with its praise', st['instruction'])
+            st = wait_for(page, lambda s: s['phase'] == 'netLowering', 15, 'the net to lower')
             check(st['dropHidden'], f'level {i + 1}: Drop Net goes away while the net is down')
             st = wait_for(page, lambda s: s['phase'] == 'levelComplete', 12, 'the catch')
             check(st['caught'] == caught + level['fish'], f'level {i + 1}: every fish was netted', f'{st["caught"] - caught} of {level["fish"]}')

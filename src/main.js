@@ -14,7 +14,6 @@ ui.on('dragStart', (point) => game.onDragStart(point));
 ui.on('dragMove', (point) => game.onDragMove(point));
 ui.on('dragEnd', () => game.onDragEnd());
 ui.on('nudge', (dx, dy) => game.onNudge(dx, dy));
-ui.on('check', () => game.onCheck());
 ui.on('drop', () => game.onDrop());
 ui.on('again', () => { audio.play('ui'); game.playAgain(); });
 document.getElementById('stage').addEventListener('pointerdown', (e) => {

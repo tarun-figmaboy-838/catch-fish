@@ -1,12 +1,13 @@
 # Popo's Parallelogram Net
 
 A browser game for Grades 1–2 about parallelograms. Popo the polar bear fishes with a net
-hung from a winch on his raft. Before he can lower it, the child has to fix its shape: three
-corners A, B, C, D are fixed and one glows; the child drags that corner until the net has the
-property the level asks for, presses Check, and if the net is right, Drop Net lowers it over
-the school, the fish are netted, hauled up and tipped into the bucket, and the next net
-appears. Eight nets teach the properties one by one, then a final card:
-"Parallelogram Pro!" with the five properties named one at a time.
+hung from a winch on his raft. Before he lowers it, the child fixes its shape: three corners
+A, B, C, D are fixed and one glows; the child drags that corner until the net has the property
+the level asks for (Drop Net glows when it does) and presses Drop Net. A right net goes down
+over the school, the fish are netted, hauled up and tipped into the bucket, and Popo winds
+the net up and lets the next one down. A wrong net goes down all the same, but the catch
+thrashes, tears through it and dives back into the sea. Eight nets teach the properties one
+by one, then a final card: "Parallelogram Pro!" with the five properties named one at a time.
 
 ## Run
 
@@ -19,8 +20,8 @@ python3 -m http.server 8000
 ```
 
 Append `?debug` to expose `window.popoDebug = { state, game }`. Append `?dev=1` for a small
-panel of screen jumps (bottom left): title, intro, each of the six levels, solve the current
-net, drop it, row on, and the final screen. Number keys 1–9 and 0 press the first ten buttons;
+panel of screen jumps (bottom left): title, intro, each of the eight levels, put the current
+net's corner in its place, drop it, row on, and the final screen. Number keys 1–9 and 0 press the first ten buttons;
 the backtick key folds the panel away.
 
 ## Deploy
@@ -31,15 +32,17 @@ original artwork, voice recordings and tools out of the deployment.
 
 ## The game
 
-- **Flow.** Title → Popo rows in (honk, screech, boing, poof) → three narrator lines, the first
-  school swims in on the last one → the net lowers from the boom → level 1. After each catch
-  the fish hop into the bucket and the next school swims in while the net morphs to its next
-  shape; when a level is in new waters Popo rows there first (levels 1–2, 3–4, 5–6 and 7–8 are
-  in the four locations). After level 8, the final card with Play Again, which goes straight
-  to level 1. The page gets a `popo:complete` event (and a `postMessage` when framed).
+- **Flow.** Title → Popo rows in (honk, screech, boing, poof) with the net wound up in a
+  bundle under the boom → three narrator lines, the first school swims in on the last one →
+  Popo lets the net down and it opens into its first frame → level 1. After each catch the fish
+  hop into the bucket, Popo winds the empty net up into its bundle, rows on when the next level
+  is in new waters (levels 1–2, 3–4, 5–6 and 7–8 are in the four locations), and lets the net
+  down in its new shape as the next school swims in. After level 8, the final card with Play
+  Again, which goes straight to level 1. The page gets a `popo:complete` event (and a
+  `postMessage` when framed).
 - **Phases** (`src/state.js`): one phase at a time decides what input is allowed: title,
-  intro, puzzleReady, dragging, snapping, shapeCorrect, dropReady, netLowering, catching,
-  netRaising, levelSuccess, transitioning, gameComplete. Pause is a flag over the top.
+  intro, puzzleReady, dragging, correct, netLowering, catching, netRaising, netBreaking,
+  levelComplete, transitioning, gameComplete. Pause is a flag over the top.
 - **Levels** (`src/levels.js`): eight nets, each teaching one property with its own check
   (`type`): 1 make AB parallel to CD, 2 make BC parallel to AD, 3 make CD 6 m like AB, 4 place
   C so CD = AB and BC = AD, 5 make angle C equal angle A (70°), 6 make angle B supplementary
@@ -48,7 +51,7 @@ original artwork, voice recordings and tools out of the deployment.
   angle at A), the corner that moves and where it starts, an optional line it moves along (so
   a length or angle level changes only that), the side whose length in metres sets the
   measurement scale, the fish count (3, 4, 4, 5, 5, 6, 7, 9), the prompt, the praise and the
-  hint a wrong Check gives. The final level's school is rare: golden, quicker, trailing glints.
+  hint a wrong net gives. The final level's school is rare: golden, quicker, trailing glints.
 - **Geometry** (`src/geometry.js`, `src/net.js`): plain vector helpers (parallel by the
   normalised cross product, so vertical sides are no trouble; interior angles; the diagonals'
   intersection; area and self-intersection). Corners A, B, C, D in order make a parallelogram
@@ -56,26 +59,34 @@ original artwork, voice recordings and tools out of the deployment.
   the check for each level uses the real measurements with child-sized tolerances (about
   3.5° of parallel, a quarter metre, 3° of angle). While dragging, the corner is kept inside
   its limits and off bow ties; inside the snap radius it is pulled toward its place and
-  settles onto it when let go, but nothing completes until the child presses Check. Positions
+  settles onto it when let go, but nothing completes until the child presses Drop Net. Positions
   are net coordinates measured from the lifting ring, and the whole stage scales to the
   screen, so metres and degrees are the same everywhere and survive a resize.
 - **Stage.** The world is a fixed 1672x941 logical space scaled to the viewport. The paintings
   have their waterline 41% down, so they are drawn `SCENE_SHIFT` lower (the water pass carries
   the sky on above them), putting the water at about 60% and leaving the sky to the net.
-- **Teaching the shape.** The first net arrives as a parallelogram, its two pairs of
-  parallel sides light up while the narrator says why, then a corner slips: the child's job
-  is to put it back. Every level shows only what it is about: parallel ticks that turn green
-  when a pair lines up, side lengths in metres (references fixed, the rest live), angle arcs
-  with degrees, or the diagonals with O and their four halves; vertex labels A–D are always
-  there. A right Check locks the exact answer and lights the property; a wrong one wobbles
-  the corner, makes Popo think and gives a short hint without resetting anything.
+- **Teaching the shape.** Every level shows only what it is about: parallel ticks that turn
+  green when a pair lines up, side lengths in metres (references fixed, the rest live), angle
+  arcs with degrees, or the diagonals with O and their four halves; vertex labels A–D are always
+  there. Drop Net glows, with a chime, while the frame has the property. Pressed then, it locks
+  the exact answer, lights the property with its praise, and the net goes down for the catch.
+  Pressed with a wrong frame, the net goes down all the same: the netted fish thrash until the
+  mesh tears, then wriggle out and dive back into the sea; the level's hint shows while Popo
+  winds the torn net up and lets it down mended, in the shape the child left it, and its corner
+  wobbles to say it's the one to fix.
 - **Hints.** Left alone, the first net shows the hand dragging once toward the corner's
   place; later nets swell their measurements instead (the supplementary level shows
   65° + ? = 180° once the child starts), so the game teaches rather than solves itself. Once
-  the net is ready, idling makes the hand tap on Drop Net.
-- **HUD.** The instruction and the narrator's lines share one translucent water panel in the
-  top band; the level pill shows the net count and a fish tally; Check and Drop Net sit
-  bottom right (Check while solving, Drop Net armed once the answer is right).
+  the frame is right, idling makes the hand tap on Drop Net.
+- **HUD.** Narration follows the Fishing Frenzy games: the instruction (prompt, praise, hint)
+  and the narrator's lines sit on one translucent navy plate with a faint gold rim, white
+  text and the key word in gold, fitted to the words (a line that wraps is balanced and the
+  plate hugs it). Popo's own lines are its cream speech bubble with dark ink and an orange key
+  word, growing word by word with its line breaks pinned. Sound and pause are its round orange
+  icon buttons. Drop Net, the one action, is a chunky game button bottom right: a sunny face
+  with dark-brown outline, label (about 10:1 contrast) and a lip it presses down onto, the net
+  icon in a badge; it pops in, and while the frame is right it glows and a shine sweeps it.
+  The pause and final cards' buttons match it.
 - **The winch** (`src/winch.js`): the generated arched machine (`assets/generated/winch-arched.png`)
   drawn whole at one scale on the raft's deck, its end pulley out over the water where the
   net hangs. Popo (`assets/generated/popo-operating.png`, four poses of him turning a
@@ -85,7 +96,10 @@ original artwork, voice recordings and tools out of the deployment.
   along the line, and the net hangs from the generated brass shackle (`rope-connector.png`).
 - **The net's look**: the generated net texture (`assets/generated/net.png`, rope frame,
   floats and weights) is warped onto the frame triangle by triangle, cached per shape, so it
-  deforms with the puzzle and rides with the raft for free.
+  deforms with the puzzle and rides with the raft for free. Wound up, it is drawn gathered
+  toward its sling (narrow and short) under the pulley while the drum and Popo's wheel turn;
+  torn, a ragged hole is cut out of the mesh with frayed, dark-edged strands around it and
+  bits flung out as it rips (the frame holds).
 - **Fish** (`src/fish.js`): the natural cartoon fish of `asset/fish-natural-*.png`, drawn in
   vertical strips that ripple head to tail so they visibly swim. A level's school swims in
   from the edges and keeps to the water under the net; as the net comes down they slow and
@@ -96,7 +110,8 @@ original artwork, voice recordings and tools out of the deployment.
 
 - `index.html`, `src/` – the game. Classic scripts sharing the `PopoGame` namespace, loaded in
   dependency order from `index.html`. `game.js` orchestrates (levels, input, hints, drawing),
-  `sequences.js` holds the opening, the Check, the drop/catch/raise, the row and the finale,
+  `sequences.js` holds the opening, the drop (right or wrong), the catch and raise, a wrong
+  net breaking, the net winding up and letting down, the row and the finale,
   `geometry.js` the vector helpers, `net.js` the net, its checks and measurements, `winch.js` the machine, `fish.js` the fish, `popo.js`
   Popo and the raft, `water.js` the WebGL water pass, `effects.js` bubbles, splashes and
   sparkles, `audio.js` the synthesised music and effects plus the recorded voice lines,
@@ -136,10 +151,11 @@ script). Edit a line in `LINES` and the game's text together, then run the scrip
 
 Headless Chromium through Python Playwright (`pip install playwright pillow`):
 
-- `python3 tests/playthrough.py` – plays all eight nets with real pointer drags and the Check
-  and Drop Net buttons: a wrong Check leaves the puzzle open, a right one locks an exact
-  answer (also through a mid-drag resize), Drop Net arms only then, every fish is netted,
-  waters change, pause freezes the game, the final card appears, Play Again starts over.
+- `python3 tests/playthrough.py` – plays all eight nets with real pointer drags and the Drop
+  Net button: a wrong net dropped anyway loses its catch and comes back mended with a hint,
+  Drop Net glows once the corner is in its place (also through a mid-drag resize) and then
+  locks the exact answer with its praise, every fish is netted, waters change, pause freezes
+  the game, the final card appears, Play Again starts over.
 - `python3 tests/geometry.py` – every level's property holds exactly at the solved position and
   fails at the start, the start is a simple frame well outside the snap radius, the corner can
   reach its place, the net hangs clear of the water and the school's water is inside the
@@ -155,7 +171,7 @@ Headless Chromium through Python Playwright (`pip install playwright pillow`):
 - Popo's operating poses (`assets/generated/popo-operating.png`) were generated from the
   original character (`asset/popo-fishing-clean.png`, kept for reference; `popo.png` is the
   first rod-less take). He breathes from his seat, bounces when pleased and tilts his head
-  when a Check is wrong. While rowing he is the pre-rendered paddling stroke of the original
+  when a net breaks. While rowing he is the pre-rendered paddling stroke of the original
   art (`asset/popo-paddling-rig-source.png`), scaled to the seated character.
 - The raft with its bucket comes from `asset/props-new.png`. The hint hand is `asset/hint-hand.png`.
 - `asset/winch-concept.png` was the first machine concept and `assets/generated/winch.png` the

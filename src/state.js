@@ -7,12 +7,11 @@ const PHASE = {
   INTRO: 'intro',
   PUZZLE_READY: 'puzzleReady',
   DRAGGING: 'dragging',
-  CHECKING: 'checking',
   CORRECT: 'correct',
-  DROP_READY: 'dropReady',
   NET_LOWERING: 'netLowering',
   CATCHING: 'catching',
   NET_RAISING: 'netRaising',
+  NET_BREAKING: 'netBreaking',
   LEVEL_COMPLETE: 'levelComplete',
   TRANSITIONING: 'transitioning',
   GAME_COMPLETE: 'gameComplete',
@@ -25,7 +24,6 @@ const state = {
   locationIndex: 0,
   fish: [],
   caught: 0,   // netted so far
-  banked: 0,   // of those, already in the bucket (the HUD's tally)
   muted: false,
   token: 0,
   idleTime: 0,
@@ -39,7 +37,6 @@ function resetProgress() {
   state.locationIndex = 0;
   state.fish = [];
   state.caught = 0;
-  state.banked = 0;
   state.idleTime = 0;
   state.misses = 0;
 }

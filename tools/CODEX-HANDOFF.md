@@ -10,6 +10,10 @@ positions, animation logic, tests). This file is how they coordinate; the user r
 - **Claude:** all of `src/*.js`, `index.html` structure, `tests/`, `tools/build-*.py`.
 - Neither edits the other's files. If a change is needed on the other side, describe it here
   (or in the prompts file) and the user passes it on. Never run both at the same time.
+- **Keep as they are** (the user asked for these on 19 Oct 2026): the narration plate and
+  Popo's speech bubble follow the Fishing Frenzy games (`~/Downloads/popo-fishing/fishing-frenzy`),
+  as do the round icon buttons; Drop Net (the only action now, no Check) and the cards'
+  buttons are chunky game buttons in the game's dark-brown ink. Please don't restyle them.
 
 ## How to deliver art
 
@@ -37,7 +41,7 @@ positions, animation logic, tests). This file is how they coordinate; the user r
 1. **Popo expressions**, same sheet layout as `popo-operating.png` (2 × 2 cells of 694 × 566,
    same seat and shaft registration as the top-left pose, wheel grip at 12 o'clock):
    a blink (eyes closed), a happy open-mouth cheer, a thinking face (eyes up, mouth small),
-   and a gasp. File: `popo-faces.png`. These give the Check feedback real expressions.
+   and a gasp. File: `popo-faces.png`. These give the catch and the torn net real expressions.
 2. **Title banner** `title.png`, 1672 × 941, for "Popo's Parallelogram Net": the current scene
    (raft with the arched winch, the net as a parallelogram, Arctic water) with the title at
    the top right. Keep a clear circle for the play button at (836, 772), radius 112.
