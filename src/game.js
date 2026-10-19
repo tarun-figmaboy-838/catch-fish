@@ -1126,7 +1126,7 @@ class Game {
     const offset = this.drawBackground(ctx);
     this.fx.drawWater(ctx, offset, state.fish);
     for (const f of this.ambient) f.draw(ctx);
-    for (const f of state.fish) f.draw(ctx);
+    for (const f of state.fish) if (!f.flying) f.draw(ctx);
     for (const f of this.leapers) f.draw(ctx);
     this.fx.drawSplashLayer(ctx, false);
     // the net hangs over the fish; its lifting rope comes down from the boom's end pulley
@@ -1152,6 +1152,8 @@ class Game {
       popo.draw(ctx);
     }
     onRaft(() => winch.draw(ctx));
+    // netted fish hop over the deck into the bucket
+    for (const f of state.fish) if (f.flying) f.draw(ctx);
     this.drawRaftWater(ctx);
     this.drawPoof(ctx);
     this.fx.drawFront(ctx);

@@ -475,14 +475,20 @@ html, body {
 .icon-btn { border-radius: 1.8em; border: .2em solid #d0ede7; background: var(--paper); color: var(--ink); box-shadow: 0 .35em 0 #85b9ba, 0 .6em 1.4em #174c6320; }
 .icon-btn:hover { background: #d9fff0; transform: translateY(-2px); }
 .drop-btn {
-  top: auto; bottom: 4%; right: 3%; transform: none;
+  top: auto; bottom: 2.4em; right: 2.4em; transform: none;
   font-size: 2.8em; padding: .6em 1em; border: .1em solid #fff2bc; border-radius: .9em;
   background: linear-gradient(#ffe398, #ffc65b); color: #53421e;
   box-shadow: 0 .18em 0 #b98230, 0 .5em 1em #174c6325;
   min-height: 44px;
+  animation: rise-in .45s cubic-bezier(0.2, 1.6, 0.4, 1);
 }
+/* the HUD's pieces drop into place when the game starts */
+.hud:not([hidden]) .hud-top > * { animation: rise-in .55s cubic-bezier(0.2, 1.6, 0.4, 1) backwards; }
+.hud:not([hidden]) .instruction { animation-delay: .1s; }
+.hud:not([hidden]) .hud-buttons { animation-delay: .2s; }
+@keyframes rise-in { from { opacity: 0; transform: translateY(1.2em) scale(.9); } }
 .drop-btn:disabled { filter: none; opacity: 1; color: #4b7078; background: #dfefeb; border-color: #f5fffa; box-shadow: 0 .18em 0 #85aeb0; }
-.drop-btn.ready { animation: ready-breathe 1.8s ease-in-out infinite; }
+.drop-btn.ready { animation: rise-in .45s cubic-bezier(0.2, 1.6, 0.4, 1), ready-breathe 1.8s ease-in-out .5s infinite; }
 .drop-btn:not(:disabled):hover { filter: brightness(1.06); }
 .drop-btn:not(:disabled):active { transform: translateY(3px); }
 @keyframes ready-breathe { 50% { box-shadow: 0 .18em 0 #b98230, 0 0 0 .2em #fff4b84d, 0 .5em 1em #174c6325; } }
@@ -559,3 +565,8 @@ html, body {
   .card .card-kicker { display: none; }
   .card, .card.celebrate { padding: 4em 3em; }
 }
+/* The panel's frame is a share of its size, so the content clears it by a share too, at
+   every screen size. */
+.card, .card.celebrate { padding: 13% 9% 12%; }
+@container (max-width: 720px) { .card, .card.celebrate { padding: 13% 9% 12%; } }
+@container (max-width: 440px) { .card, .card.celebrate { padding: 13% 9% 12%; } }

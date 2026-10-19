@@ -256,6 +256,8 @@ async function snapCorner(game) {
     });
     net.solve();
     audio.play('snap');
+    const snapped = net.toStage(net.target);
+    game.fx.sparkle(snapped.x, snapped.y, 14);
     state.phase = PHASE.SHAPE_CORRECT;
     popo.react('happy', 1.2);
     await clock.wait(140, token);
@@ -366,6 +368,7 @@ async function collectFish(game, fish, token) {
     const bucket = popo.bucketPoint();
     const peak = { x: (from.x + bucket.x) / 2, y: Math.min(from.y, bucket.y) - 170 };
     f.caught = null;
+    f.flying = true; // drawn in front of the raft on its way to the bucket
     f.dir = -1;
     return clock.tween(560, token, (t) => {
       const k = ease.inOut(t);
