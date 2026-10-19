@@ -350,16 +350,6 @@ class Net {
     drawRing(ctx, ring.x, ring.y);
     ctx.filter = 'none';
 
-    if (!wet) {
-      ctx.save();
-      ctx.globalAlpha *= 0.18;
-      ctx.translate(5, 8);
-      ctx.lineWidth = 14;
-      ctx.strokeStyle = '#061a33';
-      this.framePath(ctx, corners);
-      ctx.stroke();
-      ctx.restore();
-    }
     this.drawGenerated(ctx, wet);
     if (this.flash > 0) {
       ctx.save();
