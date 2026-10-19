@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0b4fb8">
+  <title>Shape Fish Adventure</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap">
+  <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <div id="stage" class="stage">
+      <div id="scene" class="scene" aria-hidden="true">
+        <canvas id="water" class="layer"></canvas>
+        <canvas id="world" class="layer"></canvas>
+      </div>
+
+      <div id="hits" class="hits"></div>
+      <img id="hand" class="hand" src="assets/sprites/hint-hand.webp" alt="" hidden aria-hidden="true">
+
+      <div id="speech" class="speech" hidden aria-live="polite"><span class="line"></span></div>
+      <div id="caption" class="caption" hidden aria-live="polite"><span class="line"></span></div>
+
+      <div id="hud" class="hud" hidden>
+        <div class="hud-top">
+          <div id="instruction" class="instruction" role="status" aria-live="polite">
+            <span id="instruction-text"></span>
+          </div>
+          <div class="hud-buttons">
+            <button id="btn-sound" class="icon-btn" type="button" aria-label="Sound on" aria-pressed="true">
+              <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path class="spk" d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path class="wave" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a9 9 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path class="mute" d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+            <button id="btn-pause" class="icon-btn" type="button" aria-label="Pause">
+              <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>
+            </button>
+          </div>
+        </div>
+        <button id="btn-next" class="btn primary next-btn" type="button" aria-label="Next" hidden>Next</button>
+      </div>
+
+      <section id="overlay-pause" class="overlay pause" hidden aria-label="Paused">
+        <div class="card">
+          <h2>Paused</h2>
+          <button id="btn-resume" class="btn primary" type="button">Resume</button>
+          <button id="btn-restart" class="btn" type="button">Restart</button>
+        </div>
+      </section>
+
+      <section id="screen-start" class="screen start" aria-labelledby="game-title">
+        <h1 id="game-title" class="sr-only">Shape Fish Adventure</h1>
+        <button id="btn-play" class="play-hit" type="button" aria-label="Play"></button>
+        <p id="loading" class="loading" role="status">Loading…</p>
+      </section>
+    </div>
+    <div id="rotate-hint" class="rotate-hint" hidden>Rotate your device for the best experience</div>
+  </div>
+  <script src="src/sprite-data.js" defer></script>
+  <script src="src/background-data.js" defer></script>
+  <script src="src/levels.js" defer></script>
+  <script src="src/state.js" defer></script>
+  <script src="src/clock.js" defer></script>
+  <script src="src/assets.js" defer></script>
+  <script src="src/stage.js" defer></script>
+  <script src="src/effects.js" defer></script>
+  <script src="src/water.js" defer></script>
+  <script src="src/mishap-data.js" defer></script>
+  <script src="src/rowing-data.js" defer></script>
+  <script src="src/rowing-cycle-data.js" defer></script>
+  <script src="src/rowing.js" defer></script>
+  <script src="src/popo.js" defer></script>
+  <script src="src/fish.js" defer></script>
+  <script src="src/swiftee.js" defer></script>
+  <script src="src/voice-data.js" defer></script>
+  <script src="src/audio.js" defer></script>
+  <script src="src/ui.js" defer></script>
+  <script src="src/sequences.js" defer></script>
+  <script src="src/game.js" defer></script>
+  <script src="src/main.js" defer></script>
+  <script src="src/dev.js" defer></script>
+</body>
+</html>
