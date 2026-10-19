@@ -1063,7 +1063,7 @@ class Game {
     this.fx.drawSplashLayer(ctx, false);
     // the net hangs over the fish; its lifting rope comes down from the boom's end pulley
     const { popo, winch } = this;
-    this.net.draw(ctx, { waterline: this.waterline, pulley: popo.transformPoint(winch.exit.x, winch.exit.y) });
+    this.net.draw(ctx, { waterline: this.waterline, pulley: { hub: popo.transformPoint(winch.hub.x, winch.hub.y), exit: popo.transformPoint(winch.exit.x, winch.exit.y) } });
     // the raft, the machine on it and Popo at its wheel ride the waves as one; Popo is drawn
     // after the machine so his wheel's shaft meets the axle (rowing, he paddles behind it)
     const onRaft = (part) => {

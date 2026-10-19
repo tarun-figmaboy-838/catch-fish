@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { geo, drawRope, drawRing, RING_KNOT, RING_BAR } = PopoGame;
+const { geo, drawRope, drawPulleyWrap, drawRing, ROPE_WIDTH, RING_KNOT, RING_BAR } = PopoGame;
 const { sub, add, times, dot, length, distance, midpoint, lerp, normalize, parallel, angleAt, intersection, isValidQuad, insideConvex, rotate } = geo;
 
 // The fishing net: a rope frame of four corners A, B, C, D (top-left, clockwise) hung from one
@@ -300,7 +300,7 @@ class Net {
     if (!this.visible) return;
     const r = this.ring();
     const reach = Math.max(...this.points.map((p) => length(p))) + 80;
-    const top = Math.min(pulley.y, r.y - reach);
+    const top = Math.min(pulley.hub.y - 30, r.y - reach);
     const bottom = r.y + reach;
     if (bottom < waterline) {
       this.drawAll(ctx, r, pulley, false);
@@ -331,13 +331,15 @@ class Net {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     if (wet) ctx.filter = 'saturate(0.6) brightness(0.85)';
-    // the lifting rope runs down from the boom's pulley into the ring's socket; the sling that
-    // carries the whole frame comes up from the top corners behind the ring and is lashed to
-    // its bottom bar with two turns, which hide the legs' ends. The machine's painted rope, tiled.
-    drawRope(ctx, pulley, { x: ring.x, y: ring.y + 6 }, 10, this.ropePhase);
+    // the lifting rope comes round the boom's end pulley and drops into the ring's socket; the
+    // sling that carries the whole frame comes up from the top corners behind the ring and is
+    // lashed to its bottom bar with two turns, which hide the legs' ends. The machine's painted
+    // rope, tiled.
+    drawPulleyWrap(ctx, pulley.hub, pulley.exit, this.ropePhase);
+    drawRope(ctx, pulley.exit, { x: ring.x, y: ring.y + 6 }, ROPE_WIDTH, this.ropePhase);
     const knot = { x: ring.x, y: ring.y + KNOT };
-    drawRope(ctx, knot, corners[0], 7);
-    drawRope(ctx, knot, corners[1], 7);
+    drawRope(ctx, knot, corners[0], 5);
+    drawRope(ctx, knot, corners[1], 5);
     drawRing(ctx, ring.x, ring.y);
     // the turns stay on the bar, so their ends look tucked round behind it
     ctx.save();
@@ -345,7 +347,7 @@ class Net {
     ctx.rect(ring.x - 12, ring.y + RING_BAR.top, 24, RING_BAR.bottom - RING_BAR.top);
     ctx.clip();
     for (const dx of [-3, 3]) {
-      drawRope(ctx, { x: ring.x + dx - 1.5, y: ring.y + RING_BAR.top - 2 }, { x: ring.x + dx + 1.5, y: ring.y + RING_BAR.bottom + 2 }, 5.5);
+      drawRope(ctx, { x: ring.x + dx - 1.5, y: ring.y + RING_BAR.top - 2 }, { x: ring.x + dx + 1.5, y: ring.y + RING_BAR.bottom + 2 }, 4.5);
     }
     ctx.restore();
     ctx.filter = 'none';
