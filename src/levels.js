@@ -1,7 +1,7 @@
 (function (PopoGame) {
 'use strict';
 
-// The six nets, the four fishing locations and the story lines.
+// The eight nets, the four fishing locations and the story lines.
 
 // waterline: where the water meets the sky in the painting (the stage shifts the painting down,
 // see SCENE_SHIFT). Levels move on to the next location as they go.
@@ -12,33 +12,62 @@ const LOCATIONS = [
   { name: 'Northern Waters', background: 3, waterline: 388 },
 ];
 
-const DRAG = 'Drag the glowing corner to make a *parallelogram*.';
-const MAKE = 'Make a *parallelogram*!';
-
-// Each level's solved net is a parallelogram: width and height, and lean (how far its top edge
-// sits to the right of its bottom edge). `corner` is the one the child moves (A top-left, B
-// top-right, C bottom-right, D bottom-left) and `start` is where it begins, measured from
-// where it belongs: clearly wrong, never nearly right. `magnet` scales how close is close
-// enough; hints wait `hintDelay` seconds of idling.
+// The corners are A top-left, B top-right, C bottom-right and D bottom-left, clockwise. Each
+// level's solved net is a parallelogram: `width`, `height` and `lean` (how far the top edge
+// sits to the right of the bottom edge), or `angleA` instead of a lean. `corner` is the one
+// the child moves and `start` where it begins, measured from its place; `along` keeps that
+// corner on the line of the side named, so dragging only changes what the level is about.
+// `metres` gives a side's length in metres, which sets the scale of every measurement shown.
+// Each level teaches one property; `type` picks the check (see Net.check).
 const LEVELS = [
-  // guided discovery
-  { location: 0, fish: 3, corner: 'B', width: 480, height: 200, lean: 60, start: { x: -120, y: 70 },
-    hintDelay: 3.5, instruction: DRAG, praise: 'Great! *Opposite sides* are parallel!' },
-  // the same idea, leaning the other way
-  { location: 1, fish: 4, corner: 'B', width: 460, height: 210, lean: -70, start: { x: 90, y: 85 },
-    hintDelay: 5, instruction: DRAG, praise: 'A parallelogram has *two pairs* of parallel sides!' },
-  // a different corner
-  { location: 1, fish: 5, corner: 'D', width: 500, height: 200, lean: 90, start: { x: 130, y: -80 },
-    hintDelay: 5.5, instruction: DRAG, praise: 'Nice! You made a *parallelogram*!' },
-  // different proportions: wide and low
-  { location: 2, fish: 6, corner: 'C', width: 600, height: 180, lean: -80, start: { x: -110, y: -90 },
-    hintDelay: 6, instruction: MAKE, praise: 'Parallelograms can look *different*!' },
-  // less guidance: tall, a closer fit asked for, hints only after a long idle
-  { location: 2, fish: 7, corner: 'A', width: 420, height: 260, lean: 70, start: { x: -130, y: 90 },
-    magnet: 0.75, hintDelay: 7, instruction: MAKE, praise: 'Great! *Opposite sides* are parallel!' },
-  // master round
-  { location: 3, fish: 8, corner: 'D', width: 580, height: 240, lean: -110, start: { x: 150, y: -100 },
-    hintDelay: 8, instruction: MAKE, praise: 'Nice! You made a *parallelogram*!' },
+  { title: 'Make it Parallel', type: 'parallel', sides: ['AB', 'CD'], corner: 'B',
+    width: 440, height: 200, lean: 50, start: { x: 22, y: -90 }, // slid along AD, so BC stays parallel to AD
+    location: 0, fish: 3, hintDelay: 3.5,
+    prompt: 'Make *AB* parallel to *CD*.',
+    praise: 'Great! AB and CD are parallel.',
+    hint: 'Look at AB and CD. Do they run in the same direction?' },
+  { title: 'Complete the Parallelogram', type: 'parallel', sides: ['BC', 'AD'], corner: 'C',
+    width: 440, height: 210, lean: -60, start: { x: 120, y: 0 }, // slid along DC, so CD stays parallel to AB
+    location: 0, fish: 4, hintDelay: 5,
+    prompt: 'Make *BC* parallel to *AD*.',
+    praise: 'Nice! Both pairs of opposite sides are parallel.',
+    hint: 'Look at BC and AD. Do they lean the same way?' },
+  { title: 'Match the Opposite Side', type: 'length', side: 'CD', reference: 'AB', metres: { AB: 6 }, corner: 'C', along: 'DC',
+    width: 420, height: 200, lean: 50, start: { x: -98, y: 0 }, // CD starts at 4.6 m
+    location: 1, fish: 4, hintDelay: 5,
+    prompt: 'AB = *6 m*. Make CD = *6 m*.',
+    praise: 'Great! Opposite sides can be equal.',
+    hint: 'Compare the two opposite side lengths.' },
+  { title: 'Use Both Side Properties', type: 'sides', metres: { AB: 8, AD: 5 }, corner: 'C',
+    width: 380, height: 230, lean: 60, start: { x: -85, y: -70 },
+    location: 1, fish: 5, hintDelay: 6,
+    prompt: 'AB = *8 m* and AD = *5 m*. Make the net a parallelogram.',
+    praise: 'Perfect! Opposite sides are equal and parallel.',
+    hint: 'CD should match AB, and BC should match AD.' },
+  { title: 'Match the Opposite Angle', type: 'angle', vertex: 'C', reference: 'A', degrees: 70, corner: 'C', along: 'DC',
+    width: 420, height: 210, angleA: 70, start: { x: -110, y: 0 }, // angle C starts near 96 degrees
+    location: 2, fish: 5, hintDelay: 6,
+    prompt: '∠A = *70°*. Make ∠C = *70°*.',
+    praise: 'Yes! Opposite angles are equal.',
+    hint: 'Compare angle A with angle C.' },
+  { title: 'Make the Adjacent Angle', type: 'supplementary', vertex: 'B', reference: 'A', degrees: 65, corner: 'B', along: 'AB',
+    width: 420, height: 210, angleA: 65, start: { x: 104, y: 0 }, // angle B starts near 88 degrees
+    location: 2, fish: 6, hintDelay: 6,
+    prompt: '∠A = *65°*. Make ∠B supplementary to ∠A.',
+    praise: 'Great! Adjacent angles add to 180°.',
+    hint: 'Adjacent angles should add to 180°.' },
+  { title: 'Balance the Diagonals', type: 'diagonals', metres: { AB: 6 }, corner: 'C',
+    width: 440, height: 210, lean: 50, start: { x: 80, y: -65 },
+    location: 3, fish: 7, hintDelay: 7,
+    prompt: 'Make the diagonals *bisect* each other.',
+    praise: 'Great! The diagonals bisect each other.',
+    hint: 'Check both halves of each diagonal.' },
+  { title: 'Final Catch', type: 'parallelogram', metres: { AB: 6 }, corner: 'D',
+    width: 400, height: 210, lean: 30, rotate: -7, start: { x: 80, y: -70 },
+    location: 3, fish: 9, hintDelay: 9,
+    prompt: 'Make this net a *parallelogram*.',
+    praise: 'You made a parallelogram!',
+    hint: 'Think about what you learned: sides, angles, diagonals.' },
 ];
 
 // The fish Popo nets, drawn in assets/sprites/fish-natural.webp (tools/build-assets.py).
@@ -56,7 +85,7 @@ function shuffle(list) {
 // A school of different fish for a level; no two levels in a row share the same mix.
 let lastSchool = [];
 function schoolFor(level) {
-  let school = shuffle(NATURAL_FISH).slice(0, level.fish);
+  const school = shuffle(NATURAL_FISH).slice(0, level.fish);
   if (school.every((key) => lastSchool.includes(key))) {
     const fresh = NATURAL_FISH.find((key) => !lastSchool.includes(key));
     if (fresh) school[0] = fresh;
@@ -78,9 +107,15 @@ const STORY = {
   drop: 'Drop the *net*!',
   catch: { who: 'popo', text: '*Great* catch!', cue: { word: 0, do: 'hop' } },
   complete: { who: 'popo', text: 'We caught them *all*!', cue: { word: 0, do: 'hop' } },
-  // the final screen
-  made: 'You made *parallelograms*!',
-  lesson: 'Both pairs of opposite sides are *parallel*.',
+  // the final card: the title, then the properties one at a time
+  title: 'Parallelogram *Pro*!',
+  lessons: [
+    'Opposite sides are *parallel*.',
+    'Opposite sides are *equal*.',
+    'Opposite angles are *equal*.',
+    'Adjacent angles add to *180°*.',
+    'Diagonals *bisect* each other.',
+  ],
 };
 
 Object.assign(PopoGame, { LOCATIONS, LEVELS, NATURAL_FISH, STORY, shuffle, schoolFor });

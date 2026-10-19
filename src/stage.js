@@ -52,9 +52,10 @@ class Stage {
   }
 }
 
-// The raft's middle at the waterline: big enough for Popo, his bucket and the winch.
+// The raft's middle at the waterline: room for Popo, his bucket and the winch, with the net
+// hanging clear of the machine's mast.
 function raftAnchor(waterline) {
-  return { x: 268, y: waterline + 12 };
+  return { x: 240, y: waterline + 12 };
 }
 
 Object.assign(PopoGame, { STAGE_W, STAGE_H, SCENE_SHIFT, SEABED_Y, Stage, raftAnchor });

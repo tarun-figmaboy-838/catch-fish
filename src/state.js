@@ -7,13 +7,13 @@ const PHASE = {
   INTRO: 'intro',
   PUZZLE_READY: 'puzzleReady',
   DRAGGING: 'dragging',
-  SNAPPING: 'snapping',
-  SHAPE_CORRECT: 'shapeCorrect',
+  CHECKING: 'checking',
+  CORRECT: 'correct',
   DROP_READY: 'dropReady',
   NET_LOWERING: 'netLowering',
   CATCHING: 'catching',
   NET_RAISING: 'netRaising',
-  LEVEL_SUCCESS: 'levelSuccess',
+  LEVEL_COMPLETE: 'levelComplete',
   TRANSITIONING: 'transitioning',
   GAME_COMPLETE: 'gameComplete',
 };
@@ -29,7 +29,7 @@ const state = {
   muted: false,
   token: 0,
   idleTime: 0,
-  misses: 0, // corners let go away from their place this level; hints come sooner after a few
+  misses: 0, // wrong checks this level; hints come sooner after a couple
 };
 
 function resetProgress() {

@@ -4,7 +4,7 @@
 // Number keys 1–9 and 0 press the buttons in order; ` folds the panel away.
 if (new URLSearchParams(location.search).get('dev') !== '1') return;
 
-const { state, PHASE, LEVELS, snapCorner, rowTo, celebrate, newToken } = PopoGame;
+const { state, PHASE, LEVELS, checkAnswer, rowTo, celebrate, newToken } = PopoGame;
 
 function game() {
   return window.popoDebug && window.popoDebug.game;
@@ -49,7 +49,7 @@ const JUMPS = [
     const g = game();
     if (state.phase !== PHASE.PUZZLE_READY) level(state.level);
     g.net.setHandle(g.net.target);
-    snapCorner(g);
+    checkAnswer(g);
   }],
   ['Drop', () => { const g = game(); if (state.phase === PHASE.DROP_READY) g.onDrop(); }],
   ['Row on', () => {

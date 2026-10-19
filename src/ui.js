@@ -25,7 +25,7 @@ class UI {
     this.el = {
       hud: $('hud'), hits: $('hits'), handle: $('handle'), hand: $('hand'), start: $('screen-start'), loading: $('loading'), play: $('btn-play'),
       instruction: $('instruction'), instructionText: $('instruction-text'), level: $('level'), levelText: $('level-text'),
-      caught: $('caught'), caughtText: $('caught-text'), drop: $('btn-drop'),
+      caught: $('caught'), caughtText: $('caught-text'), check: $('btn-check'), drop: $('btn-drop'),
       sound: $('btn-sound'), pause: $('btn-pause'),
       pauseOverlay: $('overlay-pause'), resume: $('btn-resume'), restart: $('btn-restart'),
       completeOverlay: $('overlay-complete'), completeTitle: $('complete-title'), completeLesson: $('complete-lesson'), again: $('btn-again'),
@@ -43,6 +43,7 @@ class UI {
     this.el.pause.addEventListener('click', h('pause'));
     this.el.resume.addEventListener('click', h('resume'));
     this.el.restart.addEventListener('click', h('restart'));
+    this.el.check.addEventListener('click', h('check'));
     this.el.drop.addEventListener('click', h('drop'));
     this.el.again.addEventListener('click', h('again'));
     this.wireHandle();
@@ -87,7 +88,7 @@ class UI {
         this.emit('nudge', step[0], step[1]);
       } else if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        this.emit('tryHandle');
+        this.emit('check');
       }
     });
   }
@@ -106,7 +107,14 @@ class UI {
     if (!on) this.dragId = null;
   }
 
-  // 'hidden', 'disabled' (the shape isn't right yet) or 'ready'
+  // Check: 'ready' while the child solves, 'busy' while an answer is judged, 'hidden' after.
+  setCheck(mode) {
+    const b = this.el.check;
+    b.hidden = mode === 'hidden';
+    b.disabled = mode !== 'ready';
+  }
+
+  // Drop Net: 'hidden', 'disabled' (the shape isn't right yet) or 'ready'
   setDrop(mode) {
     const b = this.el.drop;
     b.hidden = mode === 'hidden';
@@ -185,7 +193,7 @@ class UI {
   placeSpeech(x, y) {
     const b = this.speechBox || { w: 0, h: 0, em: 0 };
     const width = this.el.hits.clientWidth;
-    const left = Math.max(8 + 0.6 * b.em, Math.min(x * this.scale, width - b.w + 0.6 * b.em - 8));
+    const left = Math.min(x * this.scale, width - b.w + 0.6 * b.em - 4);
     const top = Math.max(y * this.scale, b.h + 4);
     this.el.speech.style.left = `${left.toFixed(1)}px`;
     this.el.speech.style.top = `${top.toFixed(1)}px`;
@@ -268,6 +276,12 @@ class UI {
     markup(this.el.completeTitle, title);
     markup(this.el.completeLesson, lesson);
     this.el.again.focus({ preventScroll: true });
+  }
+
+  // The final card's lesson line, one property at a time.
+  setLesson(text) {
+    markup(this.el.completeLesson, text);
+    this.pop(this.el.completeLesson);
   }
 
   // --- hint hand ---------------------------------------------------------------

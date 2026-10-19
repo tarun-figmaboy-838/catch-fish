@@ -570,3 +570,64 @@ html, body {
 .card, .card.celebrate { padding: 13% 9% 12%; }
 @container (max-width: 720px) { .card, .card.celebrate { padding: 13% 9% 12%; } }
 @container (max-width: 440px) { .card, .card.celebrate { padding: 13% 9% 12%; } }
+/* Check and Drop Net share the bottom-right corner: Check while solving, Drop Net once the
+   net is right. */
+.actions { position: absolute; right: 2.4em; bottom: 2.4em; display: flex; gap: 1em; align-items: center; pointer-events: none; }
+.actions > button { pointer-events: auto; }
+.actions .drop-btn { position: static; }
+.check-btn {
+  display: inline-flex; align-items: center; gap: .4em;
+  font: inherit; font-size: 2.8em; font-weight: 700; padding: .6em 1.1em .6em .9em;
+  border: .1em solid #d9fff3; border-radius: .9em; cursor: pointer; min-height: 44px;
+  background: linear-gradient(#5ee3c7, #1fb49b); color: #0b3d36;
+  box-shadow: 0 .18em 0 #0e7d6b, 0 .5em 1em #174c6325;
+  animation: rise-in .45s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+.check-btn svg { width: 1.2em; height: auto; }
+.check-btn[hidden] { display: none; }
+.check-btn:disabled { cursor: default; filter: saturate(.5) brightness(.95); }
+.check-btn:not(:disabled):hover { filter: brightness(1.06); }
+.check-btn:not(:disabled):active { transform: translateY(3px); box-shadow: 0 .02em 0 #0e7d6b; }
+.check-btn:focus-visible { outline: .25em solid #fff; outline-offset: .2em; }
+.card.celebrate p.say { animation: instruction-boing 0.55s cubic-bezier(0.2, 1.8, 0.4, 1); }
+@container (max-width: 720px) { .check-btn { font-size: 2.2em; } .actions { gap: .6em; } }
+/* Chunky game buttons: a glossy face, a dark outline and a solid lip underneath that the
+   button presses down onto. */
+.icon-btn {
+  border-radius: 1.3em; border: .16em solid #0d5d6b; color: #0d5d6b;
+  background: linear-gradient(#ffffff, #d6f3f6 55%, #bfe8ee);
+  box-shadow: 0 .42em 0 #0d5d6b, 0 .8em 1.2em rgba(0, 30, 60, .28), inset 0 .16em 0 #fff;
+  transition: transform .08s ease, box-shadow .08s ease;
+}
+.icon-btn:hover { background: linear-gradient(#ffffff, #e4fafb 55%, #cdeff3); transform: none; }
+.icon-btn:active { transform: translateY(.32em) scale(1); box-shadow: 0 .1em 0 #0d5d6b, 0 .3em .6em rgba(0, 30, 60, .28), inset 0 .16em 0 #fff; }
+.check-btn, .drop-btn, .btn {
+  border-radius: 1em; font-weight: 800; letter-spacing: .01em;
+  text-shadow: 0 .05em 0 rgba(255, 255, 255, .45);
+  transition: transform .08s ease, box-shadow .08s ease, filter .2s ease;
+}
+.check-btn {
+  border: .14em solid #0b4f45; color: #073a33;
+  background: linear-gradient(#8ef5d8, #2ec4a6 55%, #169b84);
+  box-shadow: 0 .4em 0 #0b4f45, 0 .8em 1.2em rgba(0, 30, 60, .28), inset 0 .16em 0 rgba(255, 255, 255, .6);
+}
+.check-btn:not(:disabled):hover { filter: brightness(1.05); }
+.check-btn:not(:disabled):active { transform: translateY(.3em); box-shadow: 0 .1em 0 #0b4f45, 0 .3em .6em rgba(0, 30, 60, .28), inset 0 .16em 0 rgba(255, 255, 255, .6); }
+.check-btn:disabled { filter: none; opacity: .75; }
+.drop-btn {
+  border: .14em solid #7a4a08; color: #4a2d06;
+  background: linear-gradient(#ffe9a8, #ffc24f 55%, #f5a623);
+  box-shadow: 0 .4em 0 #7a4a08, 0 .8em 1.2em rgba(0, 30, 60, .28), inset 0 .16em 0 rgba(255, 255, 255, .6);
+}
+.drop-btn:not(:disabled):active { transform: translateY(.3em); box-shadow: 0 .1em 0 #7a4a08, 0 .3em .6em rgba(0, 30, 60, .28), inset 0 .16em 0 rgba(255, 255, 255, .6); }
+.drop-btn:disabled {
+  opacity: 1; filter: none; color: #5f7580; border-color: #5f7580;
+  background: linear-gradient(#edf3f5, #cfdbe0 55%, #bccbd2);
+  box-shadow: 0 .4em 0 #5f7580, 0 .6em 1em rgba(0, 30, 60, .2), inset 0 .16em 0 rgba(255, 255, 255, .6);
+}
+@keyframes ready-breathe { 50% { box-shadow: 0 .4em 0 #7a4a08, 0 0 0 .3em rgba(255, 226, 140, .55), 0 .8em 1.6em rgba(240, 138, 29, .55), inset 0 .16em 0 rgba(255, 255, 255, .6); } }
+.btn { border: .12em solid #0d5d6b; color: #0d5d6b; background: linear-gradient(#ffffff, #d6f3f6 55%, #bfe8ee); box-shadow: 0 .32em 0 #0d5d6b, 0 .6em 1em rgba(0, 30, 60, .25); }
+.btn.primary, .card.celebrate .btn.primary { border-color: #7a4a08; color: #4a2d06; background: linear-gradient(#ffe9a8, #ffc24f 55%, #f5a623); box-shadow: 0 .32em 0 #7a4a08, 0 .6em 1em rgba(0, 30, 60, .25); }
+.btn:hover { transform: none; filter: brightness(1.05); }
+.btn:active { transform: translateY(.24em); filter: none; box-shadow: 0 .08em 0 #0d5d6b; }
+.btn.primary:active, .card.celebrate .btn.primary:active { box-shadow: 0 .08em 0 #7a4a08; }

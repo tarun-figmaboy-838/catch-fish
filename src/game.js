@@ -1,11 +1,12 @@
 (function (PopoGame) {
 'use strict';
-const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, spawnFish, spawnSchool, refreshShadows, LOCATIONS, LEVELS, schoolFor, Popo, Winch, Net, opening, startLevels, snapCorner, dropNet, Cancelled, STAGE_W, STAGE_H, SCENE_SHIFT, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
+const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, spawnFish, spawnSchool, refreshShadows, LOCATIONS, LEVELS, schoolFor, Popo, Winch, Net, opening, startLevels, settleCorner, checkAnswer, dropNet, Cancelled, STAGE_W, STAGE_H, SCENE_SHIFT, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
 
 const HINT_REPEAT = 7;    // seconds of idling between hints once one has been shown
 const NET_CLEARANCE = 40; // the net's bottom edge hangs this far above the water
 const SCHOOL_TOP = 55;    // the school keeps this far below the surface
 const SCHOOL_MARGIN = 26; // and this far inside the net's footprint
+const TICK_GAP = 90;      // ms between measurement ticks while dragging
 
 // The title banner: its water surface, sand line, the open water the decorative fish swim
 // in, where the hooked fish splashes, and sparkle points along the logo's snowy edges.
@@ -56,6 +57,7 @@ class Game {
     this.hint = null;
     this.hintShown = false;
     this.drag = null;
+    this.lastTick = { value: null, at: 0 };
     this.lastFrame = 0;
     this.running = false;
     ui.setScale(stage.scale);
@@ -113,6 +115,7 @@ class Game {
     this.ui.showComplete(false);
     this.ui.hideHand();
     this.ui.showHandle(false);
+    this.ui.setCheck('hidden');
     this.ui.setDrop('hidden');
     const muted = state.muted;
     resetProgress();
@@ -121,6 +124,7 @@ class Game {
     this.popo = new Popo();
     this.winch = new Winch();
     this.net = new Net();
+    this.net.textScale = this.labelScale();
     this.ambient = [];
     this.leapers = [];
     this.hop = null;
@@ -176,13 +180,18 @@ class Game {
   prepareLevel(index) {
     state.level = index;
     const level = LEVELS[index];
-    const before = this.net.points.map((p) => ({ ...p }));
-    this.net.setLevel(level, this.waterline - NET_CLEARANCE - this.netRest.y);
-    const span = this.net.innerSpan();
+    const net = this.net;
+    const before = net.points.map((p) => ({ ...p }));
+    net.setLevel(level, this.waterline - NET_CLEARANCE - this.netRest.y);
+    // the corner stays clear of the raft and inside the stage
+    const limits = net.limits;
+    limits.left = Math.max(limits.left, this.popo.raftEnds().right + 60 - this.netRest.x);
+    limits.right = Math.min(limits.right, STAGE_W - 48 - this.netRest.x);
+    const span = net.innerSpan();
     const top = this.waterline + SCHOOL_TOP;
     this.fishArea = {
       left: this.netRest.x + span.left + SCHOOL_MARGIN, right: this.netRest.x + span.right - SCHOOL_MARGIN,
-      top, bottom: top + level.height - 40,
+      top, bottom: top + (span.bottom - span.top) - 40,
     };
     this.hintShown = false;
     this.ui.setLevel(index, LEVELS.length);
@@ -220,23 +229,25 @@ class Game {
     state.idleTime = 0;
     state.misses = 0;
     this.net.locked = false;
-    this.parallel = [this.net.pairParallel(0), this.net.pairParallel(1)];
+    this.lastTick = { value: this.net.liveValue(), at: 0 };
     this.popo.idle();
     this.ui.showHandle(true);
+    this.ui.setCheck('ready');
     this.ui.setDrop('disabled');
-    this.ui.setInstruction(level.instruction);
-    this.speak(level.instruction);
+    this.ui.setInstruction(level.prompt);
+    this.speak(level.prompt);
   }
 
-  // Reads an instruction aloud (when it has a recording) for children who can't read it yet.
-  // Returns the recording's length in seconds, so text changes can wait for it.
+  // Reads a line aloud (when it has a recording) for children who can't read it yet. Returns
+  // the recording's length in seconds, so text changes can wait for it.
   speak(text) {
     return this.dialogue ? 0 : this.audio.speak('narrator', text);
   }
 
-  // How far the ring must drop for the net's bottom edge to pass under the whole school.
+  // How far the ring must drop for the net's bottom edge (its higher corner, on a tilted net)
+  // to pass under the whole school.
   catchDepth() {
-    return this.fishArea.bottom + 14 - (this.netRest.y + this.net.bottom());
+    return this.fishArea.bottom + 14 - (this.netRest.y + this.net.innerSpan().bottom);
   }
 
   // The net breaking the surface: splashes under its bottom corners and in the middle.
@@ -265,7 +276,7 @@ class Game {
 
   // --- input ----------------------------------------------------------------
   onDragStart(point) {
-    if (state.paused || state.phase !== PHASE.PUZZLE_READY) return;
+    if (state.paused || state.phase !== PHASE.PUZZLE_READY || this.net.settling) return;
     state.phase = PHASE.DRAGGING;
     this.stopHint();
     const handle = this.net.points[this.net.movable];
@@ -279,49 +290,41 @@ class Game {
     if (state.phase !== PHASE.DRAGGING) return;
     const local = this.net.toNet(point);
     this.net.moveHandle({ x: local.x + this.drag.dx, y: local.y + this.drag.dy });
-    this.noticeParallel();
+    this.tickMeasure();
   }
 
-  // A soft tick the moment a pair of sides lines up, so the child hears what the marks show.
-  noticeParallel() {
-    const now = [this.net.pairParallel(0), this.net.pairParallel(1)];
-    if ((now[0] && !this.parallel[0]) || (now[1] && !this.parallel[1])) this.audio.play('parallel');
-    this.parallel = now;
+  // A soft tick as the shown measurement changes, throttled so a fast drag doesn't rattle.
+  tickMeasure() {
+    const value = this.net.liveValue();
+    const now = performance.now();
+    if (value === this.lastTick.value) return;
+    this.lastTick.value = value;
+    if (now - this.lastTick.at < TICK_GAP) return;
+    this.lastTick.at = now;
+    this.audio.play('tick');
   }
 
+  // Let go near its place, the corner settles onto it; the child still presses Check.
   onDragEnd() {
     if (state.phase !== PHASE.DRAGGING) return;
     this.drag = null;
-    this.tryCorner();
-  }
-
-  // Let go (or Enter): close enough snaps home; otherwise the corner stays where it is,
-  // with a soft wobble, and after a couple of tries the hint comes sooner.
-  tryCorner() {
-    if (this.net.withinReach) {
-      snapCorner(this);
-      return;
-    }
     state.phase = PHASE.PUZZLE_READY;
-    state.misses += 1;
-    state.idleTime = state.misses >= 2 ? LEVELS[state.level].hintDelay - 1.5 : 0;
-    this.net.wobble = 1;
-    this.audio.play('wobble');
+    state.idleTime = 0;
+    if (this.net.withinReach) settleCorner(this);
   }
 
   onNudge(dx, dy) {
-    if (state.paused || state.phase !== PHASE.PUZZLE_READY) return;
+    if (state.paused || state.phase !== PHASE.PUZZLE_READY || this.net.settling) return;
     this.stopHint();
     state.idleTime = 0;
     const p = this.net.points[this.net.movable];
     this.net.moveHandle({ x: p.x + dx, y: p.y + dy });
-    this.noticeParallel();
+    this.tickMeasure();
   }
 
-  onTryHandle() {
-    if (state.paused || state.phase !== PHASE.PUZZLE_READY) return;
-    this.stopHint();
-    this.tryCorner();
+  onCheck() {
+    if (state.paused || state.phase !== PHASE.PUZZLE_READY || this.net.settling) return;
+    checkAnswer(this);
   }
 
   onDrop() {
@@ -451,11 +454,18 @@ class Game {
   resize() {
     this.stage.resize();
     this.ui.setScale(this.stage.scale);
+    this.net.textScale = this.labelScale();
     // keep the bubble, the corner and the hint on their marks even while paused
     if (this.dialogue && this.dialogue.who !== 'narrator') this.placeSpeech();
     this.placeHandle();
     this.ui.showRotateHint(this.stage.portrait);
     this.syncWaterCanvas();
+  }
+
+  // The net's labels are drawn in stage pixels; on a small screen the stage shrinks, so they
+  // grow to stay about 14 CSS pixels or more.
+  labelScale() {
+    return Math.max(1, 0.64 / this.stage.scale);
   }
 
   // The painting is STAGE_W pixels wide, so the water pass never renders more pixels than
@@ -476,14 +486,15 @@ class Game {
   }
 
   // --- hints ------------------------------------------------------------------
-  // Left alone for a while, the hand appears on the corner and shows the drag once: along
-  // the way to where the corner belongs, then it fades. Once the net is ready, the hand taps
-  // on Drop Net instead. Any touch cancels it.
+  // Left alone for a while: on the first net the hand shows the drag once, along the way to
+  // where the corner belongs; later nets swell their measurements instead, so the child
+  // reasons rather than copies. Once the net is ready, the hand taps on Drop Net. Any touch
+  // cancels a hint.
   updateHint(dt) {
     const puzzle = state.phase === PHASE.PUZZLE_READY;
     if (!puzzle && state.phase !== PHASE.DROP_READY) return;
     if (this.hint) {
-      if (puzzle) this.advanceHint(dt);
+      if (this.hint.hand && puzzle) this.advanceHand(dt);
       else if ((this.hint.t += dt) > 2.4) { this.stopHint(); state.idleTime = 0; }
       return;
     }
@@ -493,21 +504,24 @@ class Game {
   }
 
   showHint(puzzle) {
-    this.hint = { t: 0 };
+    const hand = !puzzle || state.level === 0;
+    this.hint = { t: 0, hand };
     this.ui.pulseInstruction();
     this.audio.play('hint');
-    if (puzzle) {
-      this.ui.showHand(true);
-      if (!this.hintShown) this.speak(LEVELS[state.level].instruction);
-    } else {
+    if (!puzzle) {
       const d = this.ui.dropPoint();
       this.ui.moveHand(d.x - 8, d.y - 6);
       this.ui.showHand(false);
+    } else if (hand) {
+      this.ui.showHand(true);
+    } else {
+      this.net.hintPulse = 2.4;
     }
+    if (puzzle && !this.hintShown) this.speak(LEVELS[state.level].prompt);
     this.hintShown = true;
   }
 
-  advanceHint(dt) {
+  advanceHand(dt) {
     const h = this.hint;
     h.t += dt;
     const from = this.net.handle();
@@ -524,6 +538,7 @@ class Game {
   stopHint() {
     if (!this.hint) return;
     this.hint = null;
+    this.net.hintPulse = 0;
     this.ui.hideHand();
   }
 
@@ -888,18 +903,15 @@ class Game {
     this.updateStoryFx(dt);
     this.watchFrameRate(dt);
 
-    // the net hangs from the boom, so it rides the waves with the raft; Popo leans into the
-    // lever while the winch runs
+    // the net hangs from the boom, so it rides the waves with the raft; Popo's wheel follows
+    // the drum
     const { popo, winch, net } = this;
     net.origin = popo.transformPoint(winch.hang.x, winch.hang.y);
     net.drop = winch.ropeOut;
     net.ropePhase = winch.ropeOut;
-    // Popo leans into the crank while the winch runs and pumps its arm up and down with it
-    const k = Math.min(1, dt * 8);
-    popo.shift.x += (winch.working * 5 - popo.shift.x) * k;
-    popo.shift.y += (winch.pump() - popo.shift.y) * k;
+    popo.setMachine(winch);
     // hanging on its sling, the net sways a touch while it waits; it holds still for a drag
-    const idle = state.phase === PHASE.PUZZLE_READY || state.phase === PHASE.SHAPE_CORRECT || state.phase === PHASE.DROP_READY;
+    const idle = state.phase === PHASE.PUZZLE_READY || state.phase === PHASE.CORRECT || state.phase === PHASE.DROP_READY;
     if (idle && !this.fx.reduced) net.swing = Math.sin(this.fx.t * 0.9) * 0.008;
     else if (state.phase === PHASE.DRAGGING) net.swing *= Math.max(0, 1 - dt * 6);
     net.update(dt);
@@ -1132,26 +1144,22 @@ class Game {
     // the net hangs over the fish; its lifting rope comes down from the boom's end pulley
     const { popo, winch } = this;
     this.net.draw(ctx, { waterline: this.waterline, pulley: popo.transformPoint(winch.exit.x, winch.exit.y) });
-    // Popo, his raft and the winch beside him ride the waves as one; the crank arm goes
-    // behind him into his paws, the machine stands in front of his feet
-    const onRaft = (drawPart) => {
+    // the raft, the machine on it and Popo at its wheel ride the waves as one; Popo is drawn
+    // after the machine so his wheel's shaft meets the axle (rowing, he paddles behind it)
+    const onRaft = (part) => {
       ctx.save();
       popo.applyTransform(ctx);
       ctx.translate(popo.anchor.x, popo.anchor.y);
-      drawPart();
+      part();
       ctx.restore();
     };
     if (popo.rowing) {
       popo.draw(ctx);
+      onRaft(() => winch.draw(ctx));
     } else {
-      ctx.save();
-      popo.applyTransform(ctx);
-      popo.drawRaftProp(ctx);
-      ctx.restore();
-      onRaft(() => winch.drawArm(ctx, popo.grip()));
+      onRaft(() => { popo.drawRaftProp(ctx); winch.draw(ctx); });
       popo.draw(ctx);
     }
-    onRaft(() => winch.draw(ctx));
     // netted fish hop over the deck into the bucket
     for (const f of state.fish) if (f.flying) f.draw(ctx);
     this.drawRaftWater(ctx);

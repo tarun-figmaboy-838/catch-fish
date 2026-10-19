@@ -310,8 +310,10 @@ class AudioEngine {
       case 'wobble': this.tone({ freq: 300, to: 240, type: 'triangle', dur: 0.14, gain: 0.07 }); this.tone({ freq: 260, to: 290, t: now + 0.12, type: 'triangle', dur: 0.12, gain: 0.05 }); break;
       case 'snap': this.noise({ dur: 0.04, type: 'highpass', freq: 3000, gain: 0.12 }); this.tone({ freq: 740, to: 980, dur: 0.1, gain: 0.12 }); this.tone({ freq: 1480, dur: 0.14, t: now + 0.05, gain: 0.05 }); break;
       case 'ready': this.tone({ freq: 523.25, to: 1046.5, type: 'triangle', dur: 0.16, gain: 0.1 }); this.bell(1568, now + 0.1, 0.05); break;
-      case 'parallel': this.tone({ freq: 1046.5, dur: 0.09, gain: 0.07 }); this.tone({ freq: 1568, t: now + 0.07, dur: 0.14, gain: 0.05 }); break;
       case 'slip': this.tone({ freq: 620, to: 240, type: 'triangle', dur: 0.3, gain: 0.1 }); this.noise({ dur: 0.18, type: 'bandpass', freq: 1200, to: 400, q: 1, gain: 0.08 }); break;
+      // measurements changing under the finger, and the Check press
+      case 'tick': this.tone({ freq: 1320, dur: 0.035, gain: 0.045 }); break;
+      case 'check': this.tone({ freq: 520, to: 780, type: 'triangle', dur: 0.12, gain: 0.1 }); this.noise({ dur: 0.04, type: 'highpass', freq: 2500, gain: 0.05 }); break;
       case 'catch': seq([523.25, 659.25, 783.99, 1046.5], 0.07, { type: 'triangle', dur: 0.2, gain: 0.08 }); this.noise({ dur: 0.3, type: 'lowpass', freq: 900, to: 300, gain: 0.12 }); break;
       default: break;
     }

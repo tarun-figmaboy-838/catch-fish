@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { clock, ease, Cancelled, state, PHASE, newToken, isCurrent, Fish, STORY, LEVELS, NATURAL_FISH, STAGE_W } = PopoGame;
+const { clock, ease, Cancelled, state, PHASE, newToken, isCurrent, Fish, STORY, LEVELS, NATURAL_FISH, STAGE_W, geo } = PopoGame;
 
 function swallow(e) {
   if (!(e instanceof Cancelled)) throw e;
@@ -13,7 +13,7 @@ const shuffled = (list) => list.map((x) => [Math.random(), x]).sort((a, b) => a[
 // --- the opening ---------------------------------------------------------------
 // Before the first line, a cartoon entrance: Popo zooms in rowing flat out (honk honk!), slams
 // on the brakes with a screech, overshoots and springs back boing-boing, and in a poof the
-// paddle is gone and his paws are on the winch's crank (ta-da!).
+// paddle is gone and his paws are on the winch's wheel (ta-da!).
 async function popoArrives(game, token) {
   const { popo, fx, audio } = game;
   const reduced = fx.reduced;
@@ -88,7 +88,7 @@ async function popoArrives(game, token) {
     }
     popo.squash = 0;
     popo.tilt = 0;
-    // ta-da: a poof, and the paddle has turned into the crank handle
+    // ta-da: a poof, and the paddle has turned into the handwheel
     const head = popo.headTop();
     game.poof = { x: head.x + 30, y: head.y + 120, t: 0 };
     audio.play('poof');
@@ -195,32 +195,20 @@ async function startLevels(game) {
   }
 }
 
+// The first net arrives as a parallelogram, the narrator says what makes it one while its two
+// pairs of sides light up, then a corner slips out of place for the child to put right.
 async function firstPuzzle(game, token) {
+  const { net, popo, audio } = game;
   game.fishIn();
   await clock.wait(400, token);
-  game.net.showSolved();
+  net.showSolved();
   await netAppears(game, token);
-  await introduceNet(game, token);
-  game.beginPuzzle();
-}
-
-// Every net arrives as a parallelogram: its two pairs of parallel sides light up (the
-// narrator says why, the first time), then one corner slips out of place for the child to
-// put right.
-async function introduceNet(game, token) {
-  const { net, popo, audio } = game;
-  net.showPairs();
-  if (state.level === 0) await game.say(STORY.rule, token);
-  else await clock.wait(1000, token);
+  net.showGlow([{ sides: ['AB', 'CD'] }, { sides: ['BC', 'AD'] }], 1.1);
+  await game.say(STORY.rule, token);
   audio.play('slip');
   popo.react('gasp', 0.8);
-  const from = net.solved[net.movable];
-  const to = net.start[net.movable];
-  await clock.tween(480, token, (t) => {
-    const k = ease.outBack(t);
-    net.setHandle({ x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k });
-  });
-  net.points = net.start.map((p) => ({ ...p }));
+  await slideCorner(net, net.solved[net.movable], net.start[net.movable], token);
+  game.beginPuzzle();
 }
 
 // Popo lets the net down from the boom into its place: a little rope paid out, with a bounce.
@@ -237,42 +225,78 @@ async function netAppears(game, token) {
   winch.setRopeOut(0);
 }
 
-// --- the puzzle solved ------------------------------------------------------------
-// The corner glides home and locks; the frame lights up, then its two pairs of parallel sides
-// in turn; once every fish has swum in under the net, Drop Net is ready.
-async function snapCorner(game) {
+async function slideCorner(net, from, to, token, ms = 480) {
+  await clock.tween(ms, token, (t) => net.setHandle(geo.lerp(from, to, ease.outBack(t))));
+  net.setHandle(to);
+}
+
+// --- the puzzle -------------------------------------------------------------------
+// Let go near its place, the corner settles onto it (the child still presses Check).
+async function settleCorner(game) {
+  const net = game.net;
+  const token = state.token;
+  net.settling = true;
+  try {
+    await slideCorner(net, { ...net.points[net.movable] }, net.target, token, 240);
+  } catch (e) {
+    swallow(e);
+  } finally {
+    net.settling = false;
+  }
+}
+
+// Check: the frame is tested for the level's property. Right: the corner glides to its exact
+// place and locks, the property lights up with its praise, and once every fish has swum in,
+// Drop Net is ready. Wrong: a wobble, a thoughtful Popo and a short hint; nothing is reset.
+async function checkAnswer(game) {
   const token = newToken();
-  const { net, popo, audio, ui } = game;
+  const { net, popo, fx, audio, ui } = game;
   const level = LEVELS[state.level];
   try {
-    state.phase = PHASE.SNAPPING;
+    state.phase = PHASE.CHECKING;
     ui.showHandle(false);
+    ui.setCheck('busy');
     game.stopHint();
+    audio.play('check');
+    await clock.wait(220, token);
+    const result = net.check();
+    if (!result.ok) {
+      state.misses += 1;
+      net.wobble = 1;
+      audio.play('wobble');
+      popo.react('think', 1.4);
+      ui.setInstruction(level.hint);
+      const spoken = game.speak(level.hint);
+      await clock.wait(Math.max(1800, spoken * 1000 + 300), token);
+      ui.setInstruction(level.prompt);
+      state.phase = PHASE.PUZZLE_READY;
+      state.idleTime = state.misses >= 2 ? level.hintDelay - 1.5 : 0;
+      ui.showHandle(true);
+      ui.setCheck('ready');
+      return;
+    }
     const from = { ...net.points[net.movable] };
-    const to = net.target;
-    await clock.tween(260, token, (t) => {
-      const k = ease.outBack(t);
-      net.setHandle({ x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k });
-    });
-    net.solve();
+    if (geo.distance(from, result.snap) > 0.5) await slideCorner(net, from, result.snap, token, 260);
+    net.solve(result.snap);
     audio.play('snap');
-    const snapped = net.toStage(net.target);
-    game.fx.sparkle(snapped.x, snapped.y, 14);
-    state.phase = PHASE.SHAPE_CORRECT;
+    const snapped = net.toStage(result.snap);
+    fx.sparkle(snapped.x, snapped.y, 14);
+    state.phase = PHASE.CORRECT;
     popo.react('happy', 1.2);
     await clock.wait(140, token);
-    net.showPairs();
+    const final = level.type === 'parallelogram';
+    net.showGlow(net.glowFor(level), final ? 0.5 : 0.8);
     audio.play('success');
     ui.setInstruction(level.praise);
     const spoken = game.speak(level.praise);
-    await clock.wait(Math.max(1000, spoken * 1000 + 200), token);
+    await clock.wait(Math.max(1000, spoken * 1000 + 200, net.glowLength(level) * 1000), token);
     while (state.fish.some((f) => f.offstage || f.entering)) await clock.wait(100, token);
     state.phase = PHASE.DROP_READY;
+    ui.setCheck('hidden');
     ui.setInstruction(STORY.drop);
     game.speak(STORY.drop);
     ui.setDrop('ready');
     audio.play('ready');
-    popo.squash = 0.06; // a little bob of attention toward the machine
   } catch (e) {
     swallow(e);
   }
@@ -288,7 +312,7 @@ async function dropNet(game) {
     ui.setDrop('hidden');
     ui.setInstruction('');
     audio.stopVoice();
-    popo.squash = 0.07; // Popo takes hold of the crank
+    popo.squash = 0.07; // Popo takes hold of the wheel
     await clock.wait(200, token);
 
     const depth = game.catchDepth();
@@ -345,7 +369,7 @@ async function dropNet(game) {
     winch.setRopeOut(0);
     winch.working = 0;
 
-    state.phase = PHASE.LEVEL_SUCCESS;
+    state.phase = PHASE.LEVEL_COMPLETE;
     state.caught += caught.length;
     popo.react('laugh', 1.6);
     audio.play('catch');
@@ -401,9 +425,7 @@ async function nextLevel(game, token) {
   if (LEVELS[next].location !== state.locationIndex) await rowTo(game, LEVELS[next].location, token);
   const before = game.prepareLevel(next);
   game.spawnSchool();
-  game.net.showSolved();
   await game.morphNet(before, token);
-  await introduceNet(game, token);
   game.beginPuzzle();
 }
 
@@ -465,7 +487,7 @@ async function rowTo(game, nextIndex, token) {
   await clock.wait(250, token);
 }
 
-// After the sixth net: Popo cheers, and the final card says what was learned.
+// After the eighth net: Popo cheers, and the final card names the properties one at a time.
 async function celebrate(game, token) {
   const { popo, fx, audio, ui, net } = game;
   state.phase = PHASE.GAME_COMPLETE;
@@ -480,12 +502,16 @@ async function celebrate(game, token) {
   }
   await game.say(STORY.complete, token);
   await clock.wait(200, token);
-  ui.showComplete(true, STORY.made, STORY.lesson);
+  ui.showComplete(true, STORY.title, '');
   game.announceComplete();
-  const spoken = game.speak(STORY.made);
+  const spoken = game.speak(STORY.title);
   await clock.wait(Math.max(1200, spoken * 1000 + 250), token);
-  game.speak(STORY.lesson);
+  for (const lesson of STORY.lessons) {
+    ui.setLesson(lesson);
+    const said = game.speak(lesson);
+    await clock.wait(Math.max(1700, said * 1000 + 450), token);
+  }
 }
 
-Object.assign(PopoGame, { opening, startLevels, snapCorner, dropNet, rowTo, celebrate });
+Object.assign(PopoGame, { opening, startLevels, settleCorner, checkAnswer, dropNet, rowTo, celebrate });
 })(window.PopoGame = window.PopoGame || {});

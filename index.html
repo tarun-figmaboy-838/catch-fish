@@ -46,10 +46,16 @@
             </button>
           </div>
         </div>
-        <button id="btn-drop" class="drop-btn" type="button" disabled hidden>
-          <svg viewBox="0 0 44 40" aria-hidden="true"><path d="M14 4h26l-8 16H6z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M21 4l-5 16M30 4l-5 16M10 12h26" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.6"/><path d="M22 23v13M15 30l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span>Drop Net</span>
-        </button>
+        <div class="actions">
+          <button id="btn-check" class="check-btn" type="button" hidden>
+            <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M8 21l9 9 15-18" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Check</span>
+          </button>
+          <button id="btn-drop" class="drop-btn" type="button" disabled hidden>
+            <svg viewBox="0 0 44 40" aria-hidden="true"><path d="M14 4h26l-8 16H6z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M21 4l-5 16M30 4l-5 16M10 12h26" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.6"/><path d="M22 23v13M15 30l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Drop Net</span>
+          </button>
+        </div>
       </div>
 
       <section id="overlay-pause" class="overlay pause" hidden aria-label="Paused">
@@ -84,6 +90,7 @@
   </div>
   <script src="src/sprite-data.js" defer></script>
   <script src="src/background-data.js" defer></script>
+  <script src="src/geometry.js" defer></script>
   <script src="src/levels.js" defer></script>
   <script src="src/state.js" defer></script>
   <script src="src/clock.js" defer></script>

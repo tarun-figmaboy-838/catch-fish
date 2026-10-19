@@ -86,24 +86,51 @@ AUDITION_LINE = {'narrator': 'Popo *loves* fishing.', 'popo': '*Great* catch!'}
 
 INSTRUCTION = 'Clear and encouraging, a little slower so a young child can follow.'
 PRAISE = 'Warm and pleased.'
+HINT = 'Kind and curious, nudging rather than correcting.'
+LESSON = 'Gentle and clear: the lesson in one line.'
 
-# (speaker, text exactly as shown in the game with *stressed* words, extra delivery note)
+# (speaker, text exactly as shown in the game with *stressed* words, delivery note[, how to
+# say it when the written form would not be read aloud well])
 LINES = [
     ('narrator', 'Popo *loves* fishing.', ''),
     ('narrator', 'And today…', 'Teasing, building suspense.'),
     ('narrator', 'he wants to catch *all* kinds of fish!', 'Big and excited.'),
-    ('narrator', 'Drag the glowing corner to make a *parallelogram*.', INSTRUCTION),
-    ('narrator', 'Make a *parallelogram*!', INSTRUCTION),
-    ('narrator', 'Great! *Opposite sides* are parallel!', PRAISE),
     ('narrator', 'A parallelogram has *two pairs* of parallel sides!', PRAISE),
-    ('narrator', 'Nice! You made a *parallelogram*!', PRAISE),
-    ('narrator', 'Parallelograms can look *different*!', PRAISE),
+    ('narrator', 'Make *AB* parallel to *CD*.', INSTRUCTION, 'Make A B parallel to C D.'),
+    ('narrator', 'Great! AB and CD are parallel.', PRAISE, 'Great! A B and C D are parallel.'),
+    ('narrator', 'Look at AB and CD. Do they run in the same direction?', HINT, 'Look at A B and C D. Do they run in the same direction?'),
+    ('narrator', 'Make *BC* parallel to *AD*.', INSTRUCTION, 'Make B C parallel to A D.'),
+    ('narrator', 'Nice! Both pairs of opposite sides are parallel.', PRAISE),
+    ('narrator', 'Look at BC and AD. Do they lean the same way?', HINT, 'Look at B C and A D. Do they lean the same way?'),
+    ('narrator', 'AB = *6 m*. Make CD = *6 m*.', INSTRUCTION, 'A B is 6 metres. Make C D 6 metres.'),
+    ('narrator', 'Great! Opposite sides can be equal.', PRAISE),
+    ('narrator', 'Compare the two opposite side lengths.', HINT),
+    ('narrator', 'AB = *8 m* and AD = *5 m*. Make the net a parallelogram.', INSTRUCTION, 'A B is 8 metres and A D is 5 metres. Make the net a parallelogram.'),
+    ('narrator', 'Perfect! Opposite sides are equal and parallel.', PRAISE),
+    ('narrator', 'CD should match AB, and BC should match AD.', HINT, 'C D should match A B, and B C should match A D.'),
+    ('narrator', '∠A = *70°*. Make ∠C = *70°*.', INSTRUCTION, 'Angle A is 70 degrees. Make angle C 70 degrees.'),
+    ('narrator', 'Yes! Opposite angles are equal.', PRAISE),
+    ('narrator', 'Compare angle A with angle C.', HINT),
+    ('narrator', '∠A = *65°*. Make ∠B supplementary to ∠A.', INSTRUCTION, 'Angle A is 65 degrees. Make angle B supplementary to angle A.'),
+    ('narrator', 'Great! Adjacent angles add to 180°.', PRAISE, 'Great! Adjacent angles add to 180 degrees.'),
+    ('narrator', 'Adjacent angles should add to 180°.', HINT, 'Adjacent angles should add to 180 degrees.'),
+    ('narrator', 'Make the diagonals *bisect* each other.', INSTRUCTION),
+    ('narrator', 'Great! The diagonals bisect each other.', PRAISE),
+    ('narrator', 'Check both halves of each diagonal.', HINT),
+    ('narrator', 'Make this net a *parallelogram*.', INSTRUCTION),
+    ('narrator', 'You made a parallelogram!', PRAISE),
+    ('narrator', 'Think about what you learned: sides, angles, diagonals.', HINT),
     ('narrator', 'Drop the *net*!', 'Bright and inviting.'),
-    ('narrator', 'You made *parallelograms*!', 'Big and proud.'),
-    ('narrator', 'Both pairs of opposite sides are *parallel*.', 'Gentle: the lesson in one line.'),
+    ('narrator', 'Parallelogram *Pro*!', 'Big and proud.'),
+    ('narrator', 'Opposite sides are *parallel*.', LESSON),
+    ('narrator', 'Opposite sides are *equal*.', LESSON),
+    ('narrator', 'Opposite angles are *equal*.', LESSON),
+    ('narrator', 'Adjacent angles add to *180°*.', LESSON, 'Adjacent angles add to 180 degrees.'),
+    ('narrator', 'Diagonals *bisect* each other.', LESSON),
     ('popo', '*Great* catch!', 'Delighted and proud.'),
     ('popo', 'We caught them *all*!', 'Overjoyed.'),
 ]
+LINES = [line if len(line) == 4 else (*line, None) for line in LINES]
 
 
 def voice_key(who, text):
@@ -324,7 +351,7 @@ def kokoro_ref(who, voice=None):
     return f"kokoro:{voice or k['voice']}:{k['speed']}:{k['pitch']}"
 
 
-def record_kokoro(who, text, ref):
+def record_kokoro(who, text, ref, say=None):
     """Records a line locally with Kokoro; `ref` is kokoro:VOICE:SPEED:PITCH."""
     import numpy as np
     from kokoro import KPipeline
@@ -333,7 +360,7 @@ def record_kokoro(who, text, ref):
     if lang not in PIPELINES:
         PIPELINES[lang] = KPipeline(lang_code=lang, repo_id='hexgrad/Kokoro-82M')
     # Kokoro reads capitals as letters, so the stressed words go in as plain text
-    plain = text.replace('*', '')
+    plain = say or text.replace('*', '')
     parts = [np.asarray(r.audio, dtype=np.float32) for r in PIPELINES[lang](plain, voice=voice, speed=float(speed)) if r.audio is not None]
     audio = np.concatenate(parts)
     pitch = float(pitch)
@@ -345,12 +372,12 @@ def record_kokoro(who, text, ref):
     return 24000, array.array('h', (audio * 32767).astype('<i2').tobytes())
 
 
-def record_retrying(who, text, note, key, model, voice):
+def record_retrying(who, text, note, key, model, voice, say=None):
     if voice.startswith('kokoro:'):
-        return record_kokoro(who, text, voice)
+        return record_kokoro(who, text, voice, say)
     for attempt in range(3):
         try:
-            return record(who, text, note, key, model, voice)
+            return record(who, say or text, note, key, model, voice)
         except urllib.error.HTTPError as e:
             detail = e.read().decode(errors='replace')[:300]
             if e.code in (429, 500, 503) and attempt < 2:
@@ -418,16 +445,16 @@ def main():
     for who in roles:
         if who in cast:
             print(f"{who}: {cast[who]['voice']}  ({cast[who].get('about', '')})")
-    for who, text, note in todo:
+    for who, text, note, say in todo:
         print(f'recording {who}: {text}')
-        rate, samples = record_retrying(who, text, note, key, args.model, cast[who]['voice'])
+        rate, samples = record_retrying(who, text, note, key, args.model, cast[who]['voice'], say)
         save_wav(os.path.join(RAW, slug(who, text) + '.wav'), rate, samples)
         recorded[slug(who, text)] = cast[who]['voice']
         with open(CLIPS_FILE, 'w') as fh:
             json.dump(recorded, fh, indent=2)
 
     clips = {}
-    for who, text, _ in LINES:
+    for who, text, _, _ in LINES:
         path = os.path.join(RAW, slug(who, text) + '.wav')
         if not os.path.exists(path):
             continue

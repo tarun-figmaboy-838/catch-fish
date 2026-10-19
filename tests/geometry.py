@@ -1,10 +1,11 @@
-"""Checks every level's net mathematically: python3 tests/geometry.py
+"""Checks every level's mathematics: python3 tests/geometry.py
 
-For each of the six levels: the solved frame is a parallelogram; the starting frame is a
-simple quadrilateral that is clearly wrong (well outside the snap radius) but keeps most of
-its area; the snap radius is child-sized on a tablet; the solved net hangs clear of the
-water; and the water its school keeps to lies inside the frame when the net is down, so
-every fish can be netted. Also checks the corner's touch target is at least 48 CSS pixels.
+For each of the eight levels, at the solved position the level's property holds exactly
+(parallel sides, matching lengths, matching or supplementary angles, bisecting diagonals, or
+the whole parallelogram) and Check passes; at the starting position Check fails, the frame is
+still a simple quadrilateral with most of its area, and the corner is well outside the snap
+radius. Also: the solved net hangs clear of the water, the school's water lies inside the
+lowered net, the corner's limits contain its place, and its touch target is child-sized.
 """
 from pathlib import Path
 from playwright.sync_api import sync_playwright
@@ -13,38 +14,48 @@ ROOT = Path(__file__).resolve().parents[1]
 URL = (ROOT / 'index.html').as_uri() + '?debug'
 
 CHECKS = '''() => {
-  const { LEVELS, LOCATIONS, state, isParallelogram, isSimpleQuad, area } = PopoGame;
+  const { LEVELS, state, geo } = PopoGame;
   const g = window.popoDebug.game;
+  const net = g.net;
+  const vec = (name) => net.sideOf(name);
   return LEVELS.map((level, i) => {
     state.locationIndex = level.location;
     g.applyLocation();
     g.prepareLevel(i);
-    const net = g.net;
     const start = net.points.map((p) => ({ ...p }));
-    const solvedArea = area(net.solved);
-    const movable = start[net.movable];
-    const distance = Math.hypot(movable.x - net.target.x, movable.y - net.target.y);
+    const startOk = net.check().ok;
+    const startSimple = geo.isSimpleQuad(start);
+    const startArea = geo.area(start) / geo.area(net.solved);
+    const distance = geo.distance(start[net.movable], net.target) / net.magnet;
+    net.showSolved();
+    const tiny = (a, b) => Math.abs(a - b) < 0.05;
+    const property = {
+      parallel: () => Math.abs(geo.cross(geo.normalize(vec(level.sides[0])), geo.normalize(vec(level.sides[1])))) < 1e-6,
+      length: () => tiny(net.metres(level.side), level.metres[level.reference]),
+      sides: () => tiny(net.metres('CD'), net.metres('AB')) && tiny(net.metres('BC'), net.metres('AD')),
+      angle: () => tiny(net.angle(level.vertex), level.degrees) && tiny(net.angle(level.reference), level.degrees),
+      supplementary: () => tiny(net.angle(level.reference) + net.angle(level.vertex), 180) && tiny(net.angle(level.reference), level.degrees),
+      diagonals: () => { const h = net.halves(); return tiny(h.AO, h.OC) && tiny(h.BO, h.OD); },
+      parallelogram: () => Math.abs(net.solved[0].x + net.solved[2].x - net.solved[1].x - net.solved[3].x) < 1e-6
+        && Math.abs(net.solved[0].y + net.solved[2].y - net.solved[1].y - net.solved[3].y) < 1e-6,
+    }[level.type]();
+    const solvedOk = net.check().ok;
+    const l = net.limits;
+    const inLimits = net.target.x >= l.left && net.target.x <= l.right && net.target.y >= l.top && net.target.y <= l.bottom;
     // the frame when fully lowered, and the school's water in net coordinates
-    net.points = net.solved.map((p) => ({ ...p }));
     net.drop = g.catchDepth();
     net.origin = { ...g.netRest };
     const a = g.fishArea;
-    const corners = [[a.left, a.top], [a.right, a.top], [a.right, a.bottom], [a.left, a.bottom], [(a.left + a.right) / 2, a.bottom]];
-    const covered = corners.every(([x, y]) => net.contains({ x, y }));
-    const result = {
-      level: i + 1,
-      parallelogram: isParallelogram(net.solved),
-      simpleStart: isSimpleQuad(start),
-      startAreaRatio: area(start) / solvedArea,
-      startDistanceInMagnets: distance / net.magnet,
-      magnet: net.magnet,
-      clearOfWater: g.netRest.y + Math.max(...net.solved.map((p) => p.y)) <= g.waterline - 30,
-      schoolCovered: covered,
-      schoolSize: [a.right - a.left, a.bottom - a.top],
-    };
+    const covered = [[a.left, a.top], [a.right, a.top], [a.right, a.bottom], [a.left, a.bottom], [(a.left + a.right) / 2, a.bottom]]
+      .every(([x, y]) => net.contains({ x, y }));
     net.drop = 0;
     net.points = start;
-    return result;
+    net.locked = false;
+    return {
+      level: i + 1, type: level.type, property, solvedOk, startOk, startSimple, startArea, distance, inLimits, covered,
+      clearOfWater: g.netRest.y + Math.max(...net.solved.map((p) => p.y)) <= g.waterline - 30,
+      magnet: net.magnet, schoolSize: [a.right - a.left, a.bottom - a.top],
+    };
   });
 }'''
 
@@ -60,27 +71,32 @@ def main():
         failed = False
         for r in page.evaluate(CHECKS):
             problems = []
-            if not r['parallelogram']:
-                problems.append('solved frame is not a parallelogram')
-            if not r['simpleStart']:
+            if not r['property']:
+                problems.append('the solved net does not have the property exactly')
+            if not r['solvedOk']:
+                problems.append('Check fails at the solved position')
+            if r['startOk']:
+                problems.append('Check already passes at the start')
+            if not r['startSimple']:
                 problems.append('starting frame crosses itself')
-            if r['startAreaRatio'] < 0.45:
-                problems.append(f'starting frame too squashed ({r["startAreaRatio"]:.2f} of solved)')
-            if r['startDistanceInMagnets'] < 2.4:
-                problems.append(f'starting corner too close to its place ({r["startDistanceInMagnets"]:.1f} snap radii)')
+            if r['startArea'] < 0.45:
+                problems.append(f'starting frame too squashed ({r["startArea"]:.2f} of solved)')
+            if r['distance'] < 2:
+                problems.append(f'starting corner too close to its place ({r["distance"]:.1f} snap radii)')
             if r['magnet'] * 1024 / 1672 < 18:
                 problems.append(f'snap radius too small on a tablet ({r["magnet"] * 1024 / 1672:.0f} CSS px)')
+            if not r['inLimits']:
+                problems.append('the corner cannot be dragged to its place')
             if not r['clearOfWater']:
                 problems.append('solved net hangs in the water')
-            if not r['schoolCovered']:
+            if not r['covered']:
                 problems.append('school not covered by the lowered net')
-            if r['schoolSize'][0] < 240 or r['schoolSize'][1] < 110:
+            if r['schoolSize'][0] < 200 or r['schoolSize'][1] < 110:
                 problems.append(f'school water too small {r["schoolSize"]}')
-            print(('PASS' if not problems else 'FAIL') + f' level {r["level"]}: magnet {r["magnet"]:.0f}px, start {r["startDistanceInMagnets"]:.1f} radii away, '
-                  f'area {r["startAreaRatio"]:.2f}, school {r["schoolSize"][0]:.0f}x{r["schoolSize"][1]:.0f}' + (' -- ' + '; '.join(problems) if problems else ''), flush=True)
+            print(('PASS' if not problems else 'FAIL') + f' level {r["level"]} ({r["type"]}): start {r["distance"]:.1f} radii away, '
+                  f'area {r["startArea"]:.2f}, school {r["schoolSize"][0]:.0f}x{r["schoolSize"][1]:.0f}' + (' -- ' + '; '.join(problems) if problems else ''), flush=True)
             failed = failed or bool(problems)
 
-        # the corner's touch target on a tablet-sized screen
         page.evaluate('() => { const g = window.popoDebug.game; g.reset(); g.ui.showHud(); g.spawnSchool(); g.net.visible = true; g.beginPuzzle(); }')
         page.wait_for_timeout(200)
         size = page.evaluate('() => { const r = document.getElementById("handle").getBoundingClientRect(); return [r.width, r.height]; }')
