@@ -1,31 +1,35 @@
 (function (PopoGame) {
 'use strict';
-const { assets, getShape, STAGE_W } = PopoGame;
+const { assets, STAGE_W } = PopoGame;
 
 const TAU = Math.PI * 2;
-const FISH_SCALE = 0.58;
+const SHAPE_FISH_SCALE = 0.58;
+const STRIPS = 10; // a fish is drawn in vertical strips so its body can ripple as it swims
+
+// The natural fish of the levels, or the shape fish that circle the title's play button.
+function fishArt(key) {
+  const natural = assets.naturalFish;
+  if (natural && natural.boxes[key]) return { img: natural.img, box: natural.boxes[key], scale: natural.scale };
+  return { img: assets.fish.img, box: assets.fish.boxes[key], scale: SHAPE_FISH_SCALE };
+}
 
 class Fish {
   constructor(key, x, y, dir, sizeScale = 1) {
+    const art = fishArt(key);
     this.key = key;
-    this.shape = getShape(key);
-    const variant = assets.fish.variants[this.shape.atlas];
-    this.img = variant ? variant.img : assets.fish.img;
-    this.box = variant ? variant.box : assets.fish.boxes[this.shape.atlas];
-    this.mouth = variant ? variant.mouth : assets.fish.mouths[this.shape.atlas];
-    this.w = (this.box[2] - this.box[0]) * FISH_SCALE * sizeScale;
-    this.h = (this.box[3] - this.box[1]) * FISH_SCALE * sizeScale;
+    this.img = art.img;
+    this.box = art.box;
+    this.w = (this.box[2] - this.box[0]) * art.scale * sizeScale;
+    this.h = (this.box[3] - this.box[1]) * art.scale * sizeScale;
     this.x = x;
     this.y = y;
-    this.baseY = y;
-    this.targetY = y;
     this.dir = dir;
     this.cruise = 52 + Math.random() * 34;
     this.speed = this.cruise;
     this.turn = null;
     this.turnIn = 4 + Math.random() * 5;
     this.wanderIn = 1 + Math.random() * 2.5;
-    this.dartIn = 4 + Math.random() * 8;
+    this.dartIn = 6 + Math.random() * 10;
     this.dart = null;
     this.puffs = 0;
     this.trail = 0;
@@ -37,40 +41,38 @@ class Fish {
     this.baseY = y - Math.sin(this.driftPhase) * this.driftAmp;
     this.targetY = this.baseY;
     this.bobPhase = Math.random() * TAU;
+    this.swimPhase = Math.random() * TAU;
     this.frozen = false;
     this.wiggleT = -1;
-    this.pulse = 0;
     this.scale = 1;
     this.alpha = 1;
-    this.hinted = false;
     this.gone = false;
-    this.roam = false; // gameplay fish swim in and out of view; title fish stay in their area
-    this.offstage = false; // swimming out of view between visits
-    this.away = 0;
-    this.escaping = false;
+    this.offstage = false; // waiting beyond the edge of the stage before swimming in
+    this.entering = false; // swimming in from the edge to join the school
+    this.waitToEnter = 0;
+    this.caught = null;    // where it hangs in the net, measured from the net's ring
+    this.calm = 0;         // seconds of slowing down because the net is coming
     this.breath = 2 + Math.random() * 4;
     this.pitch = 0;
     this.lastY = y;
   }
 
-  // Leave the stage for a while, then swim back in from either side at a new depth.
-  goOffstage(seconds) {
+  // Waits off stage, then swims in from one side at a depth inside the school's area.
+  swimInAfter(seconds) {
     this.offstage = true;
-    this.away = seconds;
-    this.turn = null;
-    this.dart = null;
+    this.waitToEnter = seconds;
   }
 
   enter(area) {
     this.offstage = false;
+    this.entering = true;
     this.dir = Math.random() < 0.5 ? 1 : -1;
     this.x = this.dir > 0 ? -this.w / 2 - 12 : STAGE_W + this.w / 2 + 12;
     this.baseY = area.top + this.h / 2 + Math.random() * (area.bottom - area.top - this.h);
     this.targetY = this.baseY;
     this.y = this.baseY;
     this.lastY = this.y;
-    this.speed = this.cruise;
-    this.turnIn = 9 + Math.random() * 8;
+    this.speed = 240;
   }
 
   startTurn() {
@@ -89,14 +91,14 @@ class Fish {
 
   // A quick playful burst of speed, leaving a short bubble trail.
   startDart(boost = 2.6) {
-    if (this.reduced || this.frozen || this.escaping) return;
+    if (this.reduced || this.frozen || this.entering) return;
     this.dart = { t: 0, dur: 0.6, boost };
     this.trail = 0.4;
   }
 
   // Swim toward something interesting (a tap in the water), then carry on.
   lookAt(point) {
-    if (this.frozen || this.escaping) return;
+    if (this.frozen || this.entering) return;
     if (Math.sign(point.x - this.x) !== this.dir) this.startTurn();
     this.targetY = point.y;
     this.wanderIn = 2.5;
@@ -105,7 +107,7 @@ class Fish {
 
   // Startled by a splash: dart away from it.
   startle(point) {
-    if (this.frozen || this.escaping) return;
+    if (this.frozen || this.entering) return;
     const away = Math.sign(this.x - point.x) || 1;
     if (away !== this.dir) { this.dir = away; this.turn = null; this.speed = this.cruise * 0.4; }
     this.wiggle(true);
@@ -113,22 +115,37 @@ class Fish {
     this.puffs += 2;
   }
 
-  // Dash off to the right, then come back in from the edge at cruising speed.
-  escape() {
-    this.escaping = true;
-    this.frozen = false;
+  // The net is coming down: slow a little and, if swimming out from under it, turn back.
+  herd(centerX) {
+    if (this.frozen || this.entering) return;
+    this.calm = 0.6;
+    if (Math.sign(centerX - this.x) !== this.dir && Math.abs(centerX - this.x) > this.w * 0.6) this.startTurn();
+  }
+
+  // Netted: it hangs where the net found it and rises with the net.
+  catchAt(offset) {
+    this.caught = offset;
+    this.frozen = true;
     this.turn = null;
-    this.dir = 1;
-    this.speed = 260;
+    this.dart = null;
+    this.wiggle();
+    this.puffs += 3;
   }
 
   update(dt, area, others) {
     this.bobPhase += dt * 2.2;
+    // the tail beats faster the faster it swims, and just stirs once netted
+    this.swimPhase += dt * (this.frozen ? 2.5 : 4.5 + this.speed / 22);
     this.breath -= dt;
+    if (this.offstage) {
+      this.waitToEnter -= dt;
+      if (this.waitToEnter <= 0) this.enter(area);
+      return;
+    }
     // nose follows the vertical motion a little, smoothed so the body never jitters
     const vy = (this.y - this.lastY) / Math.max(dt, 0.001);
     this.lastY = this.y;
-    const want = this.frozen || this.escaping ? 0 : Math.max(-0.09, Math.min(0.09, vy / 900));
+    const want = this.frozen ? 0 : Math.max(-0.09, Math.min(0.09, vy / 900));
     this.pitch += (want - this.pitch) * Math.min(1, dt * 3);
     if (this.flipT >= 0 && (this.flipT += dt) > 0.6) this.flipT = -1;
     if (this.wiggleT >= 0) {
@@ -136,14 +153,16 @@ class Fish {
       if (this.wiggleT > (this.subtleWiggle ? 0.16 : 0.45)) this.wiggleT = -1;
     }
     if (this.frozen) return;
-    if (this.offstage) {
-      if (!this.escaping && (this.away -= dt) <= 0) this.enter(area);
-      return;
-    }
-    if (this.escaping) {
-      this.x += this.speed * dt;
-      if (PopoGame.state.phase === 'levelTransition') this.alpha = Math.max(0, this.alpha - dt / 0.6);
-      if (this.x > STAGE_W + this.w) this.goOffstage(Infinity);
+    if (this.calm > 0) this.calm -= dt;
+
+    if (this.entering) {
+      this.x += this.dir * this.speed * dt;
+      const half = this.w / 2 + 10;
+      if (this.x > area.left + half + 40 && this.x < area.right - half - 40) {
+        this.entering = false;
+        this.turnIn = 3 + Math.random() * 4;
+      }
+      this.y = this.baseY + Math.sin(this.driftPhase += dt * this.driftFreq * TAU) * this.driftAmp;
       return;
     }
 
@@ -172,14 +191,14 @@ class Fish {
       }
     }
 
-    if (!this.roam && !this.turn) {
-      // fish that keep to an area turn before reaching its edge
+    // fish turn before reaching the edge of their area
+    if (!this.turn) {
       const stoppingDistance = this.speed * 0.35 * 0.5 + 3;
       const edgeDistance = this.dir > 0 ? area.right - this.w / 2 - 10 - this.x : this.x - area.left - this.w / 2 - 10;
       if (edgeDistance < stoppingDistance) this.startTurn();
     }
     if (!this.turn) {
-      let cruise = this.cruise * (1 + Math.sin(this.bobPhase * 0.37) * 0.06);
+      let cruise = this.cruise * (1 + Math.sin(this.bobPhase * 0.37) * 0.06) * (this.calm > 0 ? 0.55 : 1);
       if (this.dart) {
         this.dart.t += dt;
         const k = this.dart.t / this.dart.dur;
@@ -188,7 +207,7 @@ class Fish {
       } else {
         this.dartIn -= dt;
         if (this.dartIn <= 0) {
-          this.dartIn = 6 + Math.random() * 9;
+          this.dartIn = 8 + Math.random() * 10;
           this.startDart();
         }
       }
@@ -196,20 +215,13 @@ class Fish {
     }
     if (this.trail > 0) this.trail -= dt;
     this.x += this.dir * this.speed * dt;
-    if (this.roam) {
-      if ((this.dir > 0 && this.x > STAGE_W + this.w / 2 + 14) || (this.dir < 0 && this.x < -this.w / 2 - 14)) {
-        this.goOffstage(0.8 + Math.random() * 2.2);
-        return;
-      }
-    } else {
-      const half = this.w / 2 + 10;
-      if (this.x < area.left + half) {
-        this.x = area.left + half;
-        if (this.dir < 0) this.startTurn();
-      } else if (this.x > area.right - half) {
-        this.x = area.right - half;
-        if (this.dir > 0) this.startTurn();
-      }
+    const half = this.w / 2 + 10;
+    if (this.x < area.left + half) {
+      this.x = area.left + half;
+      if (this.dir < 0) this.startTurn();
+    } else if (this.x > area.right - half) {
+      this.x = area.right - half;
+      if (this.dir > 0) this.startTurn();
     }
 
     // slow wandering between depths plus a gentle drift
@@ -223,17 +235,17 @@ class Fish {
 
     // keep clear of the other fish
     for (const o of others) {
-      if (o === this || o.gone || o.offstage) continue;
+      if (o === this || o.gone || o.offstage || o.caught) continue;
       const dx = o.x - this.x;
       const dy = o.baseY - this.baseY;
-      const minX = (this.w + o.w) * 0.7;
-      const minY = (this.h + o.h) * 0.85;
+      const minX = (this.w + o.w) * 0.6;
+      const minY = (this.h + o.h) * 0.8;
       if (Math.abs(dx) < minX && Math.abs(dy) < minY) {
         const push = (minY - Math.abs(dy)) * dt * 4;
         const sign = dy >= 0 ? -1 : 1;
         this.baseY += sign * push;
         this.targetY += sign * push * 2;
-        if (Math.sign(dx) === this.dir && !this.turn && Math.abs(dx) < minX * 0.8) this.startTurn();
+        if (Math.sign(dx) === this.dir && !this.turn && Math.abs(dx) < minX * 0.45) this.startTurn();
       }
     }
     const minY = area.top + this.h / 2;
@@ -263,42 +275,31 @@ class Fish {
     ctx.save();
     ctx.globalAlpha = this.alpha;
     ctx.translate(this.x, this.y + bob + hop);
-    if (this.hinted) {
-      const r = Math.max(this.w, this.h) * 0.62 * this.scale;
-      const glow = 0.35 + Math.sin(this.bobPhase * 1.5) * 0.2;
-      const g = ctx.createRadialGradient(0, 0, r * 0.7, 0, 0, r * 1.15);
-      g.addColorStop(0, `rgba(255, 240, 180, ${glow})`);
-      g.addColorStop(1, 'rgba(255, 240, 180, 0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 1.15, 0, TAU);
-      ctx.fill();
-    }
-    // remembered so the hook can follow the mouth exactly (see mouthOf)
-    this.drawBob = bob + hop;
-    this.drawTurn = rot + this.pitch * this.dir;
-    ctx.rotate(this.drawTurn);
+    ctx.rotate(rot + this.pitch * this.dir);
     ctx.scale(this.dir * this.scale, this.scale);
     const [x0, y0, x1, y1] = this.box;
-    ctx.drawImage(this.img, x0, y0, x1 - x0, y1 - y0, -this.w / 2, -this.h / 2, this.w, this.h);
+    if (this.reduced) {
+      ctx.drawImage(this.img, x0, y0, x1 - x0, y1 - y0, -this.w / 2, -this.h / 2, this.w, this.h);
+    } else {
+      // a swimming ripple runs from head to tail: the tail and fins swing, the face barely moves
+      // (the art faces right, so the tail is the left of the sprite)
+      const sw = (x1 - x0) / STRIPS;
+      const dw = this.w / STRIPS;
+      for (let i = 0; i < STRIPS; i += 1) {
+        const u = (i + 0.5) / STRIPS;
+        const wave = Math.sin(this.swimPhase - u * 2.4) * (1 - u) ** 1.6 * this.h * 0.09;
+        ctx.drawImage(this.img, x0 + i * sw, y0, sw, y1 - y0, -this.w / 2 + i * dw, -this.h / 2 + wave, dw + 0.7, this.h);
+      }
+    }
     ctx.restore();
-  }
-
-  // Generous touch target around the visible fish.
-  hitRect() {
-    const margin = 14;
-    const w = this.w * this.scale + margin * 2;
-    const h = this.h * this.scale + margin * 2;
-    return { x: this.x - w / 2, y: this.y - h / 2, w, h };
   }
 }
 
-// Spread the fish across the swim area so none start on top of each other.
 // Fish spread across an area that they keep to (the title's fish).
 function spawnFish(keys, area, sizeScale = 1) {
   const lanes = keys.length;
   const span = area.right - area.left;
-  const order = PopoGame.shuffleFish(keys.map((k, i) => i));
+  const order = PopoGame.shuffle(keys.map((k, i) => i));
   const depth = area.bottom - area.top;
   return keys.map((key, i) => {
     const slot = order[i];
@@ -308,25 +309,21 @@ function spawnFish(keys, area, sizeScale = 1) {
   });
 }
 
-// A challenge's fish all start out of view and swim in from the left or right, one after
-// another, each a slightly different size so repeated shapes don't look cloned. They roam:
-// across and out of view, then back in later.
-function spawnSwimmers(keys, area, sizeScale = 1) {
-  const order = PopoGame.shuffleFish(keys.map((k, i) => i));
+// A level's school: each fish swims in from the left or right one after another, a little
+// different in size so no two look cloned, then cruises slowly about under the net.
+function spawnSchool(keys, area, sizeScale = 1) {
   let at = 0;
-  const delays = [];
-  for (let i = 0; i < keys.length; i += 1) { delays[order[i]] = at; at += 0.25 + Math.random() * 0.45; }
-  return keys.map((key, i) => {
-    const fish = new Fish(key, -999, area.top, 1, sizeScale * (0.92 + Math.random() * 0.16));
-    fish.roam = true;
-    fish.goOffstage(delays[i]);
+  return keys.map((key) => {
+    const fish = new Fish(key, -999, area.top, 1, sizeScale * (0.9 + Math.random() * 0.2));
+    fish.cruise = 24 + Math.random() * 18;
+    fish.swimInAfter(at);
+    at += 0.2 + Math.random() * 0.35;
     return fish;
   });
 }
 
-// Background life in the gameplay water: soft, translucent fish shadows (never shapes, so
-// nothing in the background looks like an answer). They swim straight across at their own
-// depth and pace, wag their tails, wrap around off-screen and are never tappable.
+// Background life in the gameplay water: soft, translucent fish shadows. They swim straight
+// across at their own depth and pace, wag their tails and wrap around off-screen.
 const SHADOW = { w: 128, h: 64, frames: 8 };
 let shadowSheet = null;
 
@@ -439,5 +436,5 @@ function refreshShadows(current, count, area) {
   return [...current.filter((s) => s.leaving && !s.gone), ...staying, ...fresh].sort((a, b) => b.depth - a.depth);
 }
 
-Object.assign(PopoGame, { FISH_SCALE, Fish, spawnFish, spawnSwimmers, refreshShadows });
+Object.assign(PopoGame, { Fish, spawnFish, spawnSchool, refreshShadows });
 })(window.PopoGame = window.PopoGame || {});

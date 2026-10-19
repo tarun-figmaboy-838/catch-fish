@@ -2,20 +2,38 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
+const NUDGE = 12; // arrow keys move the net's corner this many logical pixels
+
+// Fills an element with text whose *starred* words are highlighted.
+function markup(el, text) {
+  el.textContent = '';
+  text.split(/(\*[^*]+\*)/).forEach((part) => {
+    if (!part) return;
+    if (part.startsWith('*')) {
+      const b = document.createElement('b');
+      b.className = 'hl';
+      b.textContent = part.slice(1, -1);
+      el.appendChild(b);
+    } else {
+      el.appendChild(document.createTextNode(part));
+    }
+  });
+}
 
 class UI {
   constructor() {
     this.el = {
-      hud: $('hud'), hits: $('hits'), hand: $('hand'), start: $('screen-start'), loading: $('loading'), play: $('btn-play'),
-      instruction: $('instruction'), instructionText: $('instruction-text'), next: $('btn-next'),
+      hud: $('hud'), hits: $('hits'), handle: $('handle'), hand: $('hand'), start: $('screen-start'), loading: $('loading'), play: $('btn-play'),
+      instruction: $('instruction'), instructionText: $('instruction-text'), level: $('level'), levelText: $('level-text'),
+      caught: $('caught'), caughtText: $('caught-text'), drop: $('btn-drop'),
       sound: $('btn-sound'), pause: $('btn-pause'),
       pauseOverlay: $('overlay-pause'), resume: $('btn-resume'), restart: $('btn-restart'),
-      rotate: $('rotate-hint'), scene: $('scene'), speech: $('speech'), caption: $('caption'),
+      completeOverlay: $('overlay-complete'), completeTitle: $('complete-title'), completeLesson: $('complete-lesson'), again: $('btn-again'),
+      rotate: $('rotate-hint'), speech: $('speech'), caption: $('caption'),
     };
     this.handlers = {};
-    this.hitButtons = new Map();
     this.scale = 1;
-    this.hitsEnabled = false;
+    this.dragId = null;
     const h = (name) => (e) => { e.preventDefault(); this.emit(name); };
     this.el.play.addEventListener('click', h('play'));
     this.el.play.addEventListener('pointerenter', () => this.emit('playHover', true));
@@ -25,7 +43,9 @@ class UI {
     this.el.pause.addEventListener('click', h('pause'));
     this.el.resume.addEventListener('click', h('resume'));
     this.el.restart.addEventListener('click', h('restart'));
-    this.el.next.addEventListener('click', h('next'));
+    this.el.drop.addEventListener('click', h('drop'));
+    this.el.again.addEventListener('click', h('again'));
+    this.wireHandle();
   }
 
   on(name, fn) {
@@ -36,7 +56,96 @@ class UI {
     if (this.handlers[name]) this.handlers[name](...args);
   }
 
-  // A story line: a speech bubble (Popo's or Swiftee's, anchored at a stage point) or the narrator's caption.
+  // --- the net's corner ------------------------------------------------------
+  // One pointer at a time, captured so the drag carries on outside the button. The stage
+  // rectangle is measured once per drag (and again on resize), not on every move.
+  wireHandle() {
+    const handle = this.el.handle;
+    handle.addEventListener('pointerdown', (e) => {
+      if (this.dragId !== null || e.button > 0) return;
+      e.preventDefault();
+      this.dragId = e.pointerId;
+      this.dragRect = this.el.hits.getBoundingClientRect();
+      handle.setPointerCapture(e.pointerId);
+      handle.focus({ preventScroll: true });
+      this.emit('dragStart', this.dragPoint(e));
+    });
+    handle.addEventListener('pointermove', (e) => {
+      if (e.pointerId === this.dragId) this.emit('dragMove', this.dragPoint(e));
+    });
+    const end = (e) => {
+      if (e.pointerId !== this.dragId) return;
+      this.dragId = null;
+      this.emit('dragEnd', this.dragPoint(e));
+    };
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+    handle.addEventListener('keydown', (e) => {
+      const step = { ArrowLeft: [-NUDGE, 0], ArrowRight: [NUDGE, 0], ArrowUp: [0, -NUDGE], ArrowDown: [0, NUDGE] }[e.key];
+      if (step) {
+        e.preventDefault();
+        this.emit('nudge', step[0], step[1]);
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.emit('tryHandle');
+      }
+    });
+  }
+
+  dragPoint(e) {
+    const r = this.dragRect;
+    return { x: (e.clientX - r.left) / this.scale, y: (e.clientY - r.top) / this.scale };
+  }
+
+  placeHandle(x, y) {
+    this.el.handle.style.transform = `translate(${(x * this.scale).toFixed(1)}px, ${(y * this.scale).toFixed(1)}px)`;
+  }
+
+  showHandle(on) {
+    this.el.handle.hidden = !on;
+    if (!on) this.dragId = null;
+  }
+
+  // 'hidden', 'disabled' (the shape isn't right yet) or 'ready'
+  setDrop(mode) {
+    const b = this.el.drop;
+    b.hidden = mode === 'hidden';
+    b.disabled = mode !== 'ready';
+    b.classList.toggle('ready', mode === 'ready');
+    if (mode === 'ready') b.focus({ preventScroll: true });
+  }
+
+  setLevel(index, count) {
+    const text = `${index + 1} / ${count}`;
+    if (this.el.levelText.textContent === text) return;
+    this.el.levelText.textContent = text;
+    this.el.level.style.setProperty('--progress', `${(index + 1) / count * 100}%`);
+    this.pop(this.el.level);
+  }
+
+  // The fish tally pops as each fish lands in the bucket.
+  setCaught(count) {
+    const text = String(count);
+    if (this.el.caughtText.textContent === text) return;
+    this.el.caughtText.textContent = text;
+    this.pop(this.el.caught);
+  }
+
+  pop(el) {
+    el.classList.remove('say');
+    void el.offsetWidth;
+    el.classList.add('say');
+  }
+
+  // The middle of Drop Net, as a stage point, for the hint hand.
+  dropPoint() {
+    const r = this.el.drop.getBoundingClientRect();
+    const h = this.el.hits.getBoundingClientRect();
+    return { x: (r.left + r.width / 2 - h.left) / this.scale, y: (r.top + r.height / 2 - h.top) / this.scale };
+  }
+
+  // --- story lines -----------------------------------------------------------
+  // A story line: a speech bubble (Popo's, anchored at a stage point) or the narrator's caption.
   // Every word is laid out up front (hidden) so the bubble never resizes as words appear.
   showLine(who, words) {
     this.hideLines();
@@ -50,7 +159,6 @@ class UI {
       line.appendChild(span);
       return span;
     });
-    el.classList.toggle('swiftee', who === 'swiftee');
     el.hidden = false;
     if (el === this.el.speech) {
       this.speechBox = { w: el.offsetWidth, h: el.offsetHeight, em: parseFloat(getComputedStyle(el).fontSize) };
@@ -72,19 +180,12 @@ class UI {
     }
   }
 
-  placePlay(x, y, r) {
-    const k = this.scale;
-    const s = this.el.play.style;
-    s.transform = `translate(${((x - r) * k).toFixed(1)}px, ${((y - r) * k).toFixed(1)}px)`;
-    s.width = s.height = `${(2 * r * k).toFixed(1)}px`;
-  }
-
   // (x, y) is where the tail points. The bubble sits above and to the right of it, so it's
   // nudged down or left when it would run off the top or right of the stage.
   placeSpeech(x, y) {
     const b = this.speechBox || { w: 0, h: 0, em: 0 };
     const width = this.el.hits.clientWidth;
-    const left = Math.min(x * this.scale, width - b.w + 0.6 * b.em - 4);
+    const left = Math.max(8 + 0.6 * b.em, Math.min(x * this.scale, width - b.w + 0.6 * b.em - 8));
     const top = Math.max(y * this.scale, b.h + 4);
     this.el.speech.style.left = `${left.toFixed(1)}px`;
     this.el.speech.style.top = `${top.toFixed(1)}px`;
@@ -98,14 +199,17 @@ class UI {
     this.wordEls = null;
   }
 
+  // --- screens and HUD ---------------------------------------------------------
+  placePlay(x, y, r) {
+    const k = this.scale;
+    const s = this.el.play.style;
+    s.transform = `translate(${((x - r) * k).toFixed(1)}px, ${((y - r) * k).toFixed(1)}px)`;
+    s.width = s.height = `${(2 * r * k).toFixed(1)}px`;
+  }
 
   setScale(scale) {
     this.scale = scale;
-  }
-
-  toStage(clientX, clientY) {
-    const r = this.el.hits.getBoundingClientRect();
-    return { x: (clientX - r.left) / this.scale, y: (clientY - r.top) / this.scale };
+    if (this.dragId !== null) this.dragRect = this.el.hits.getBoundingClientRect();
   }
 
   setLoading(text) {
@@ -129,33 +233,19 @@ class UI {
     this.el.hud.hidden = false;
   }
 
-
-  // *word* is highlighted (the shape to catch). The panel gives a little boing on every change.
+  // *word* is highlighted. The panel gives a little boing on every change.
   setInstruction(text) {
-    const el = this.el.instructionText;
     this.el.instruction.classList.toggle('empty', !text);
     if (text === this.instructionShown) return;
     this.instructionShown = text;
-    el.textContent = '';
-    text.split(/(\*[^*]+\*)/).forEach((part) => {
-      if (!part) return;
-      if (part.startsWith('*')) {
-        const b = document.createElement('b');
-        b.className = 'hl';
-        b.textContent = part.slice(1, -1);
-        el.appendChild(b);
-      } else {
-        el.appendChild(document.createTextNode(part));
-      }
-    });
+    markup(this.el.instructionText, text);
     if (!text) return;
     this.el.instruction.classList.remove('say', 'pulse');
     void this.el.instruction.offsetWidth;
     this.el.instruction.classList.add('say');
   }
 
-
-  pulseTarget() {
+  pulseInstruction() {
     this.el.instruction.classList.remove('pulse', 'say');
     void this.el.instruction.offsetWidth;
     this.el.instruction.classList.add('pulse');
@@ -172,59 +262,32 @@ class UI {
     if (show) this.el.resume.focus();
   }
 
-  // --- fish hit targets -------------------------------------------------
-  setHitsEnabled(on) {
-    this.hitsEnabled = on;
-    this.el.hits.classList.toggle('enabled', on);
+  showComplete(show, title, lesson) {
+    this.el.completeOverlay.hidden = !show;
+    if (!show) return;
+    markup(this.el.completeTitle, title);
+    markup(this.el.completeLesson, lesson);
+    this.el.again.focus({ preventScroll: true });
   }
 
-  syncHits(fishList) {
-    const alive = new Set();
-    for (const fish of fishList) {
-      if (fish.gone || fish.offstage) continue;
-      alive.add(fish);
-      let btn = this.hitButtons.get(fish);
-      if (!btn) {
-        btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'fish-hit';
-        btn.setAttribute('aria-label', `${fish.shape.name} fish`);
-        btn.addEventListener('pointerdown', (e) => { e.preventDefault(); this.emit('fishTap', fish, this.toStage(e.clientX, e.clientY)); });
-        btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.emit('fishTap', fish, null); } });
-        this.el.hits.appendChild(btn);
-        this.hitButtons.set(fish, btn);
-      }
-      const r = fish.hitRect();
-      const k = this.scale;
-      btn.style.transform = `translate(${(r.x * k).toFixed(1)}px, ${(r.y * k).toFixed(1)}px)`;
-      btn.style.width = `${Math.max(44, r.w * k).toFixed(1)}px`;
-      btn.style.height = `${Math.max(44, r.h * k).toFixed(1)}px`;
-    }
-    for (const [fish, btn] of this.hitButtons) {
-      if (!alive.has(fish)) { btn.remove(); this.hitButtons.delete(fish); }
-    }
+  // --- hint hand ---------------------------------------------------------------
+  showHand(dragging = false) {
+    this.el.hand.hidden = false;
+    this.el.hand.classList.toggle('drag', dragging);
+    this.el.hand.classList.remove('fade');
   }
 
-  clearHits() {
-    for (const btn of this.hitButtons.values()) btn.remove();
-    this.hitButtons.clear();
+  fadeHand() {
+    this.el.hand.classList.add('fade');
   }
 
-  // --- tutorial hand --------------------------------------------------------
-  showHand() { this.el.hand.hidden = false; }
-  hideHand() { this.el.hand.hidden = true; }
+  hideHand() {
+    this.el.hand.hidden = true;
+    this.el.hand.classList.remove('fade', 'drag');
+  }
+
   moveHand(x, y) {
     this.el.hand.style.transform = `translate(${(x * this.scale).toFixed(1)}px, ${(y * this.scale).toFixed(1)}px)`;
-  }
-
-  // --- Next, at the end of the story ----------------------------------------
-  showNext() {
-    this.el.next.hidden = false;
-    this.el.next.focus({ preventScroll: true });
-  }
-
-  hideNext() {
-    this.el.next.hidden = true;
   }
 
   showRotateHint(show) {

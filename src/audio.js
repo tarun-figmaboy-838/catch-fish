@@ -1,8 +1,8 @@
 (function (PopoGame) {
 'use strict';
 
-// All sound is synthesised with the Web Audio API: no audio files were supplied.
-// Groups: music, sfx and voice (unused, kept so narration can be added later).
+// Music and effects are synthesised with the Web Audio API; the voice lines are recorded
+// (tools/build-voice.py). Groups: music, sfx and voice.
 
 const BPM = 84;
 const EIGHTH = 60 / BPM / 2;
@@ -194,15 +194,6 @@ class AudioEngine {
     if (this.travel && step % 4 === 0) this.noise({ t, dur: 0.28, type: 'bandpass', freq: 900, q: 0.8, gain: 0.08, to: 300, dest: this.music });
   }
 
-  duck(ms = 1500) {
-    if (!this.ctx) return;
-    const g = this.music.gain;
-    const now = this.ctx.currentTime;
-    g.cancelScheduledValues(now);
-    g.setTargetAtTime(0.18, now, 0.05);
-    g.setTargetAtTime(0.5, now + ms / 1000, 0.4);
-  }
-
   tone({ freq, type = 'sine', t, dur = 0.2, gain = 0.2, attack = 0.005, to = null, dest = this.sfx, send = 0 }) {
     if (!this.ctx) return;
     const start = t ?? this.ctx.currentTime;
@@ -270,32 +261,33 @@ class AudioEngine {
     }
   }
 
+  // The winch's ratchet, one tick per notch, for as long as the net is moving.
+  crank(seconds) {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const ticks = Math.floor(seconds / 0.09);
+    for (let i = 0; i < ticks; i += 1) {
+      const t = now + i * 0.09;
+      this.noise({ t, dur: 0.025, type: 'highpass', freq: 2200, gain: 0.07 });
+      if (i % 2 === 0) this.tone({ freq: 520, to: 470, t, type: 'triangle', dur: 0.04, gain: 0.03 });
+    }
+  }
+
   play(name) {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     const seq = (notes, gap, opts) => notes.forEach((n, i) => this.tone({ freq: n, t: now + i * gap, ...opts }));
     switch (name) {
       case 'ui': this.tone({ freq: 640, to: 520, dur: 0.07, gain: 0.12 }); break;
-      case 'fishTap': this.tone({ freq: 320, to: 700, dur: 0.1, gain: 0.2 }); this.noise({ dur: 0.05, type: 'highpass', freq: 2000, gain: 0.08 }); break;
-      case 'wiggle': seq([520, 660], 0.07, { type: 'triangle', dur: 0.08, gain: 0.1 }); break;
       case 'whoosh': this.noise({ dur: 0.38, type: 'bandpass', freq: 500, to: 2400, q: 1.2, gain: 0.25 }); break;
       case 'splashSmall': this.noise({ dur: 0.26, type: 'lowpass', freq: 1800, to: 500, gain: 0.3 }); this.tone({ freq: 900, to: 320, dur: 0.14, gain: 0.1 }); break;
-      case 'splashBig': this.noise({ dur: 0.55, type: 'lowpass', freq: 1400, to: 300, gain: 0.45 }); this.tone({ freq: 700, to: 200, dur: 0.25, gain: 0.14 }); this.tone({ freq: 500, to: 180, t: now + 0.12, dur: 0.3, gain: 0.1 }); break;
-      case 'reel':
-        for (let i = 0; i < 9; i += 1) this.noise({ t: now + i * 0.065, dur: 0.03, type: 'highpass', freq: 1800, gain: 0.12 });
-        this.tone({ freq: 300, to: 520, dur: 0.6, gain: 0.05, type: 'triangle' });
-        break;
-      case 'hooked': seq([440, 660], 0.09, { type: 'triangle', dur: 0.12, gain: 0.14 }); break;
       case 'collect': seq([523.25, 659.25, 783.99], 0.08, { dur: 0.25, gain: 0.14 }); this.noise({ dur: 0.12, type: 'lowpass', freq: 500, gain: 0.2 }); break;
       case 'success':
         [523.25, 659.25, 783.99, 1046.5].forEach((n, i) => this.bell(n, now + i * 0.12, 0.12));
         break;
-      case 'tug': this.tone({ freq: 230, to: 150, type: 'triangle', dur: 0.22, gain: 0.18 }); break;
-      case 'slip': this.tone({ freq: 950, to: 280, dur: 0.38, gain: 0.14 }); break;
       case 'puff': this.tone({ freq: 420, to: 740, dur: 0.09, gain: 0.075 }); this.noise({ dur: 0.06, type: 'lowpass', freq: 750, gain: 0.04 }); break;
       case 'bubbles': seq([360, 480, 620], 0.07, { type: 'sine', dur: 0.07, gain: 0.045 }); break;
       case 'drip': this.tone({ freq: 1100, to: 550, dur: 0.09, gain: 0.05 }); break;
-      case 'recover': this.tone({ freq: 380, to: 820, dur: 0.1, gain: 0.14 }); this.tone({ freq: 180, to: 240, t: now + 0.1, type: 'triangle', dur: 0.16, gain: 0.1 }); break;
       case 'paddle': this.noise({ dur: 0.25, type: 'bandpass', freq: 900, to: 300, q: 0.8, gain: 0.14 }); break;
       case 'complete': [392.0, 523.25, 659.25, 783.99].forEach((n, i) => { this.tone({ freq: n, t: now + i * 0.15, type: 'triangle', dur: 0.5, gain: 0.12 }); this.bell(n * 2, now + i * 0.15, 0.06); }); break;
       case 'hint': this.tone({ freq: 880, dur: 0.18, gain: 0.07 }); break;
@@ -304,21 +296,23 @@ class AudioEngine {
       case 'woah': this.tone({ freq: 380, to: 1150, type: 'sine', dur: 0.34, gain: 0.11 }); this.tone({ freq: 1150, to: 720, t: now + 0.32, type: 'sine', dur: 0.3, gain: 0.08 }); break;
       case 'leap': this.noise({ dur: 0.5, type: 'bandpass', freq: 400, to: 2600, q: 1.1, gain: 0.22 }); this.tone({ freq: 300, to: 760, dur: 0.4, gain: 0.08, type: 'triangle' }); break;
       case 'boing': this.tone({ freq: 170, to: 560, type: 'sine', dur: 0.22, gain: 0.12 }); this.tone({ freq: 560, to: 420, t: now + 0.2, type: 'sine', dur: 0.16, gain: 0.07 }); break;
-      case 'hmm': this.tone({ freq: 330, to: 290, type: 'triangle', dur: 0.2, gain: 0.08 }); this.tone({ freq: 290, to: 380, t: now + 0.2, type: 'triangle', dur: 0.24, gain: 0.08 }); break;
-      case 'chirp': { const f = 1500 + Math.random() * 500; this.tone({ freq: f, to: f * 1.45, type: 'sine', dur: 0.06, gain: 0.06 }); this.tone({ freq: f * 1.3, to: f * 1.05, t: now + 0.06, type: 'sine', dur: 0.05, gain: 0.04 }); break; }
       // comic sound effects for Popo's entrance
       case 'honk': [0, 0.2].forEach((d) => { this.tone({ freq: 420, to: 380, type: 'square', t: now + d, dur: 0.13, gain: 0.07 }); this.tone({ freq: 630, to: 560, type: 'triangle', t: now + d, dur: 0.13, gain: 0.05 }); }); break;
       case 'skid': this.tone({ freq: 1650, to: 1250, type: 'sawtooth', dur: 0.5, gain: 0.035 }); this.tone({ freq: 1720, to: 1300, type: 'sawtooth', dur: 0.5, gain: 0.03 }); this.noise({ dur: 0.5, type: 'bandpass', freq: 2600, to: 1500, q: 2, gain: 0.12 }); break;
       case 'poof': this.noise({ dur: 0.32, type: 'lowpass', freq: 1800, to: 240, gain: 0.32 }); this.tone({ freq: 160, to: 70, dur: 0.22, gain: 0.12 }); break;
       case 'tada': [523.25, 659.25, 783.99, 1046.5].forEach((n, i) => { this.tone({ freq: n, t: now + i * 0.07, type: 'triangle', dur: i === 3 ? 0.5 : 0.12, gain: 0.09 }); }); this.bell(2093, now + 0.21, 0.05); break;
       case 'giggle': [0, 0.07, 0.14, 0.21].forEach((d, i) => this.tone({ freq: 760 + i * 90, to: 1050 + i * 90, type: 'triangle', t: now + d, dur: 0.06, gain: 0.06 })); break;
-      // streak celebrations: a party toot, then a bigger rising fanfare
-      case 'combo2': [659.25, 783.99, 987.77].forEach((n, i) => this.tone({ freq: n, to: n * 1.06, type: 'square', t: now + i * 0.08, dur: 0.1, gain: 0.05 })); this.bell(1975.5, now + 0.24, 0.05); break;
-      case 'combo3': [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((n, i) => { this.tone({ freq: n, type: 'triangle', t: now + i * 0.07, dur: i === 4 ? 0.45 : 0.1, gain: 0.08 }); this.tone({ freq: n * 2, type: 'sine', t: now + i * 0.07, dur: 0.08, gain: 0.03 }); }); this.noise({ t: now + 0.3, dur: 0.4, type: 'highpass', freq: 5000, gain: 0.05 }); break;
-      case 'flap': this.noise({ dur: 0.12, type: 'bandpass', freq: 1300, to: 520, q: 0.9, gain: 0.07 }); break;
       case 'word': { const f = 700 + Math.random() * 260; this.tone({ freq: f, to: f * 1.15, type: 'sine', dur: 0.05, gain: 0.04 }); break; }
       case 'cheer': [523.25, 659.25, 783.99].forEach((n, i) => this.tone({ freq: n, t: now + i * 0.07, type: 'triangle', dur: 0.16, gain: 0.08 })); break;
       case 'bloop': this.tone({ freq: 420, to: 980, dur: 0.12, gain: 0.09 }); this.tone({ freq: 620, to: 1300, t: now + 0.08, dur: 0.09, gain: 0.05 }); break;
+      // the net puzzle: picking the corner up, letting it go off its place, it clicking home
+      case 'grab': this.tone({ freq: 320, to: 620, dur: 0.09, gain: 0.14 }); this.noise({ dur: 0.04, type: 'highpass', freq: 2500, gain: 0.05 }); break;
+      case 'wobble': this.tone({ freq: 300, to: 240, type: 'triangle', dur: 0.14, gain: 0.07 }); this.tone({ freq: 260, to: 290, t: now + 0.12, type: 'triangle', dur: 0.12, gain: 0.05 }); break;
+      case 'snap': this.noise({ dur: 0.04, type: 'highpass', freq: 3000, gain: 0.12 }); this.tone({ freq: 740, to: 980, dur: 0.1, gain: 0.12 }); this.tone({ freq: 1480, dur: 0.14, t: now + 0.05, gain: 0.05 }); break;
+      case 'ready': this.tone({ freq: 523.25, to: 1046.5, type: 'triangle', dur: 0.16, gain: 0.1 }); this.bell(1568, now + 0.1, 0.05); break;
+      case 'parallel': this.tone({ freq: 1046.5, dur: 0.09, gain: 0.07 }); this.tone({ freq: 1568, t: now + 0.07, dur: 0.14, gain: 0.05 }); break;
+      case 'slip': this.tone({ freq: 620, to: 240, type: 'triangle', dur: 0.3, gain: 0.1 }); this.noise({ dur: 0.18, type: 'bandpass', freq: 1200, to: 400, q: 1, gain: 0.08 }); break;
+      case 'catch': seq([523.25, 659.25, 783.99, 1046.5], 0.07, { type: 'triangle', dur: 0.2, gain: 0.08 }); this.noise({ dur: 0.3, type: 'lowpass', freq: 900, to: 300, gain: 0.12 }); break;
       default: break;
     }
   }

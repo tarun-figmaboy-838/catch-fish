@@ -53,8 +53,6 @@ const clock = {
 
 const ease = {
   inOut: (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2),
-  out: (t) => 1 - (1 - t) ** 3,
-  in: (t) => t * t * t,
   outBack: (t) => 1 + 2.2 * (t - 1) ** 3 + 1.2 * (t - 1) ** 2,
 };
 

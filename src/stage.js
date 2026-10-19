@@ -5,7 +5,10 @@
 // and scaled to fit the viewport. Everything in the game thinks in logical pixels.
 const STAGE_W = 1672;
 const STAGE_H = 941;
-const SEABED_Y = 805;
+// The paintings have their waterline 41% down. The net puzzle needs the sky, so they are drawn
+// this much lower (the water pass extends the sky above them), putting the water at about 60%.
+const SCENE_SHIFT = 170;
+const SEABED_Y = 805 + SCENE_SHIFT;
 
 class Stage {
   constructor(root, canvas) {
@@ -49,15 +52,10 @@ class Stage {
   }
 }
 
-// Where the answer fish may swim: deep water, clear of the surface, seabed, Popo's raft and the HUD strip.
-// Fish use the whole underwater stage, from just below the raft down over the sand.
-function swimArea(waterline) {
-  return { left: 40, right: STAGE_W - 40, top: waterline + 55, bottom: SEABED_Y + 70 };
-}
-
+// The raft's middle at the waterline: big enough for Popo, his bucket and the winch.
 function raftAnchor(waterline) {
-  return { x: 238, y: waterline + 12 };
+  return { x: 268, y: waterline + 12 };
 }
 
-Object.assign(PopoGame, { STAGE_W, STAGE_H, SEABED_Y, Stage, swimArea, raftAnchor });
+Object.assign(PopoGame, { STAGE_W, STAGE_H, SCENE_SHIFT, SEABED_Y, Stage, raftAnchor });
 })(window.PopoGame = window.PopoGame || {});

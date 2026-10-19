@@ -1,219 +1,152 @@
-# Popo's Shape Fishing
+# Popo's Parallelogram Net
 
-A small browser game for early shape recognition. Popo the polar bear rows across four icy
-locations and the player taps the fish whose body matches the shape he is asked for.
+A browser game for Grades 1–2 about parallelograms. Popo the polar bear fishes with a net
+hung from a winch on his raft. Before he can lower it, the child has to fix its shape: three
+corners are fixed, one glows, and dragging that corner until the frame is a parallelogram
+makes the net ready. Drop Net lowers the whole net over the school, the fish are netted,
+hauled up and tipped into the bucket, and the next net appears. Six nets, then a final card:
+"You made parallelograms! Both pairs of opposite sides are parallel."
 
 ## Run
 
-The game is plain HTML, CSS and JavaScript (canvas, WebGL for the water, Web Audio; no build
-step and no dependencies). Double-click `index.html` to play, or serve the folder over HTTP:
+Plain HTML, CSS and JavaScript (canvas, WebGL for the water, Web Audio; no build step and no
+dependencies). Double-click `index.html` to play, or serve the folder over HTTP:
 
 ```
 python3 -m http.server 8000
 # then visit http://localhost:8000/
 ```
 
-The painted water runs through a per-pixel WebGL pass (waves, refraction, seaweed sway, light
-on the sand). The backgrounds are embedded as data URLs in `src/background-data.js` so the
-pass also works when the page is opened straight from the file system; without WebGL the
-painting is drawn plainly.
-
-Append `?debug` to the URL to expose `window.popoDebug = { state, game }` for testing.
-
-Append `?dev=1` for a small panel of screen jumps (bottom left): title, intro, each level,
-a right or wrong catch, rowing on, the mystery fish, Swiftee and the summary. Number keys
-1–9 and 0 press the first ten buttons; the backtick key folds the panel away. Dev mode also
-exposes `window.popoDebug`.
+Append `?debug` to expose `window.popoDebug = { state, game }`. Append `?dev=1` for a small
+panel of screen jumps (bottom left): title, intro, each of the six levels, solve the current
+net, drop it, row on, and the final screen. Number keys 1–9 and 0 press the first ten buttons;
+the backtick key folds the panel away.
 
 ## Deploy
 
 The folder is a static site. On Vercel, import the GitHub repository and deploy with no build
 command; `vercel.json` sets long cache headers for `assets/` and `.vercelignore` leaves the
-original artwork and tools out of the deployment.
+original artwork, voice recordings and tools out of the deployment.
+
+## The game
+
+- **Flow.** Title → Popo rows in (honk, screech, boing, poof) → three narrator lines, the first
+  school swims in on the last one → the net lowers from the boom → level 1. After each catch
+  the fish hop into the bucket and the next school swims in while the net morphs to its next
+  shape; when a level is in new waters Popo rows there first (levels 1, 2–3, 4–5 and 6 are in
+  the four locations). After level 6, the final card with Play Again, which goes straight to
+  level 1. The page gets a `popo:complete` event (and a `postMessage` when framed).
+- **Phases** (`src/state.js`): one phase at a time decides what input is allowed: title,
+  intro, puzzleReady, dragging, snapping, shapeCorrect, dropReady, netLowering, catching,
+  netRaising, levelSuccess, transitioning, gameComplete. Pause is a flag over the top.
+- **Levels** (`src/levels.js`): each level gives the solved net's width, height and lean, the
+  corner that moves (A top-left, B top-right, C bottom-right, D bottom-left), where it starts
+  (an offset from its place, clearly wrong), how forgiving the snap is, how long before the
+  hint, the number of fish and the instruction and praise lines. Levels vary the corner, the
+  lean direction, the proportions and the count: 3, 4, 5, 6, 7, 8 fish.
+- **Geometry** (`src/net.js`): corners A, B, C, D in order round the frame make a parallelogram
+  exactly when A + C = B + D, so the movable corner's place follows from the other three
+  (`targetOf`). While dragging, the corner is kept inside its limits (not into the water, not
+  up to the boom) and never lets the frame fold into a bow tie; inside the snap radius it is
+  pulled toward its place, and letting go there glides it home. The radius is a share of the
+  net's shorter side (scaled per level), so it stays in proportion on every screen because the
+  whole stage scales as one. Positions are net coordinates measured from the lifting ring, so
+  lowering the net or the raft bobbing never changes the shape, and the solved frame stays
+  solved through a resize.
+- **Stage.** The world is a fixed 1672x941 logical space scaled to the viewport. The paintings
+  have their waterline 41% down, so they are drawn `SCENE_SHIFT` lower (the water pass carries
+  the sky on above them), putting the water at about 60% and leaving the sky to the net.
+- **Teaching the shape.** Every net arrives as a parallelogram: its two pairs of parallel
+  sides light up (the narrator says why over the first one), then one corner slips out of
+  place and Popo gasps: the child's job is to put it back. While dragging, the sides carry
+  parallel marks as in a geometry book (one chevron top and bottom, two left and right) that
+  turn green, with a soft tick, the moment a pair lines up; the corner's glow turns green as
+  it nears its place, and the frame flashes when the shape is right.
+- **Hints.** Left alone for the level's hint delay (3.5 s on level 1, longer later), the hand
+  appears on the glowing corner, shows the drag once along the way to its place, and fades.
+  A corner let go away from its place just wobbles; after two such tries the hint comes
+  sooner. Once the net is ready, idling makes the hand tap on Drop Net instead.
+- **HUD.** The instruction and the narrator's lines share one translucent water panel in the
+  top band; the level pill shows the net count and a fish tally that pops as each fish lands
+  in the bucket; Drop Net sits bottom right, grey until the shape is right.
+- **The winch** (`src/winch.js`): the generated wooden machine (`assets/generated/winch.png`) drawn
+  whole on the raft's deck, scaled so its end pulley sits over the water where the net hangs.
+  Its painted handle is left out and a long crank arm runs from the drum's axle into Popo's
+  paws; while the winch works he leans in and pumps the arm in time with the drum, whose coil
+  scrolls as rope pays out. The rope runs along the boom to the pulley and straight down to
+  the ring, and two sling ropes from the ring carry the net's top corners.
+- **The net's look**: the generated net texture (`assets/generated/net.png`, rope frame,
+  floats and weights) is warped onto the frame triangle by triangle, cached per shape, so it
+  deforms with the puzzle and rides with the raft for free.
+- **Fish** (`src/fish.js`): the natural cartoon fish of `asset/fish-natural-*.png`, drawn in
+  vertical strips that ripple head to tail so they visibly swim. A level's school swims in
+  from the edges and keeps to the water under the net; as the net comes down they slow and
+  turn back under it; those inside the frame are netted and rise with it. The shape fish of
+  `fish.webp` only circle the play button on the title.
 
 ## Layout
 
-- `index.html`, `src/` – the game. The scripts are classic scripts sharing the `PopoGame`
-  namespace, loaded in dependency order from `index.html`. `game.js` orchestrates, `water.js`
-  is the WebGL water pass, `sequences.js` holds the catch,
-  wrong-catch, travel and tutorial flows, `levels.js` holds the shape data and the four
-  locations, `popo.js` renders Popo from the sprite sheets, `fish.js` the swimming fish,
-  `effects.js` the ambient water, `audio.js` the synthesised sound, `ui.js` the HUD/DOM.
-- `asset/` – the untouched source artwork.
-- `assets/` – the compressed WebP art the game loads, generated from `asset/`.
-- `tools/build-assets.py` – rebuilds `assets/` and `src/sprite-data.js` (needs Pillow).
-- `tools/build-voice.py` – records the voice-overs with Gemini text-to-speech into
-  `src/voice-data.js` (see Voice-overs below).
-- `tools/build-rowing.py` builds the articulated paddling rig (`src/rowing.js`,
-  `src/rowing-data.js`, `assets/sprites/paddling/body.png` and `paddle.png`) from
-  `asset/popo-paddling-rig-source.png`; `tools/build-rowing-cycle.py` then pre-renders one
-  stroke of it into `assets/sprites/popo-row-cycle.webp` (24 frames), which the game crossfades
-  through while Popo rows. The rig's motion maths still times the splashes. Rendering the mesh
-  live cost 20–120 ms a frame; playing the frames costs about 4 ms.
-  `tools/build-popo-layers.py` cuts the raft and rod props used by the wrong-answer fall.
-  It erases the baked fishing line and hook from the fishing sheets so the game can draw a
-  single procedural line, measures each frame's raft anchor and rod tip, and compresses
-  everything to WebP.
-
-## Flow
-
-Title banner with a floating play button (fish circle it) → Popo's entrance: he zooms in
-rowing flat out (honk honk!) as fish dart out of his way, screeches past his spot, boings back,
-swaps paddle for rod in a poof (ta-da!) and fish leap for joy → the narrator's opening lines →
-four levels, each "catch them all": all the triangle fish in Triangle Bay, all the pentagons in
-Pentagon Cove, all the hexagons in Hexagon Pass, then all the quadrilaterals in Quadrilateral
-Waters (no trapezium) — 13 fish in all, each among other shapes. Fish swim in from the left
-and right at random, cross, swim out of view and come back later; one still to catch is always
-in sight. After each catch the fish goes into the bucket and Popo says "Great catch!"; right
-catches in a row make him bounce higher with a party sound → a trapezium fish Popo has never
-seen leaps out of the water ("Woah! I haven't seen that one before!" "What kind of fish was
-that?") → Swiftee the bird flies in and says "Let's find out!" on the wing → Next, which ends
-the journey back on the title. There is no end screen: Next dispatches a `popo:complete` event
-(and posts `{ type: 'popo:complete' }` to a hosting page) for whatever comes next. Story lines
-live in `STORY` in `src/levels.js`; Swiftee is `src/swiftee.js` (art from `asset/swiftee.png`,
-four wing beats registered on the belly).
-
-Each level draws a different school of target fish and shuffles its distractors, so a replay
-never repeats the same set. Besides the original fish there are 18 more, drawn in new colours
-and patterns (`asset/fish-variants.png`, cut, sized and measured by `tools/build-assets.py`
-into `assets/sprites/fish-variants.webp`): five triangles, four pentagons, three hexagons, a
-rhombus for Quadrilateral Waters, and five trapeziums, one of which is the mystery fish at the
-end of each journey. The build leaves out any fish whose colour is too close to the water's
-(the sheet's blue and teal fish vanish in it), and the sheet's two four-sided fish with no
-parallel sides, which read as trapeziums in the "every quadrilateral but the trapezium" level.
-
-`python3 tests/playthrough.py` plays the whole journey in headless Chromium (needs Python
-Playwright); `tests/mishap.py` and `tests/rowing.py` cover the wrong-answer reaction and rowing.
-`python3 tests/fish_variation.py` checks school diversity, replay selection, sprite rendering
-and a real catch of every new fish.
+- `index.html`, `src/` – the game. Classic scripts sharing the `PopoGame` namespace, loaded in
+  dependency order from `index.html`. `game.js` orchestrates (levels, input, hints, drawing),
+  `sequences.js` holds the opening, the snap, the drop/catch/raise, the row and the finale,
+  `net.js` the net geometry and drawing, `winch.js` the machine, `fish.js` the fish, `popo.js`
+  Popo and the raft, `water.js` the WebGL water pass, `effects.js` bubbles, splashes and
+  sparkles, `audio.js` the synthesised music and effects plus the recorded voice lines,
+  `ui.js` the HUD and the corner's pointer handling, `levels.js` the level and story data.
+- `asset/` – the untouched source artwork and voice recordings (not deployed).
+- `assets/` – the compressed art the game loads, generated from `asset/`, and
+  `assets/generated/` – Popo, the winch, the net texture and the dialogue panel, generated
+  images used whole (their prompts are in `tools/generated-art-prompts.txt`).
+- `tools/build-assets.py` – rebuilds `assets/` and `src/sprite-data.js` (needs Pillow): the
+  backgrounds and their water masks, the raft, the title fish and the natural fish (blue and
+  teal ones are left out because they vanish against the water).
+- `tools/build-voice.py` – records the voice lines into `src/voice-data.js` (below).
+- `tools/build-rowing.py` – Popo's paddling rig (`src/rowing.js`, `src/rowing-data.js`);
+  `tools/build-rowing-cycle.py` pre-renders one stroke of it into
+  `assets/sprites/popo-row-cycle.webp`, which the game crossfades through while Popo rows
+  (the rig's blade path still times the splashes).
 
 ## Voice-overs
 
-The narrator, Popo and Swiftee are voiced. The shipped clips were recorded locally with
-Kokoro-82M (Apache-2.0, no account): its Hindi speakers give the narrator a clear Indian
-English voice, Popo is a lower, bouncier male voice and Swiftee a sped-up bright one:
+The narrator and Popo are voiced. Each clip is keyed by speaker and on-screen text (see
+`voiceKey` in `src/audio.js`), so the instruction, praise and story lines in `src/levels.js`
+find their recordings; the words of a line appear as they are spoken, the music ducks under
+the voice, and a line without a clip falls back to the synthesised blips. The shipped clips
+were recorded locally with Kokoro-82M:
 
 ```
-python3 -m venv ~/.cache/popo-voice311   # Python 3.10+ (e.g. via `uv python install 3.11`)
+python3 -m venv ~/.cache/popo-voice311   # Python 3.10+
 ~/.cache/popo-voice311/bin/pip install kokoro soundfile lameenc
-~/.cache/popo-voice311/bin/python tools/build-voice.py --engine kokoro --audition   # samples
-~/.cache/popo-voice311/bin/python tools/build-voice.py --engine kokoro              # record
+~/.cache/popo-voice311/bin/python tools/build-voice.py --engine kokoro   # records missing lines
 ```
 
-They can also be recorded with Gemini text-to-speech, which needs an API key. The clips are recorded
-once by `tools/build-voice.py` and shipped as small MP3s inside `src/voice-data.js`, so the API
-key never reaches the game. To record or re-record them:
+They can also be recorded with Gemini text-to-speech (`GEMINI_API_KEY` in `.env`; see the
+script). Edit a line in `LINES` and the game's text together, then run the script again.
 
-```
-echo 'GEMINI_API_KEY=your-key' > .env        # .env is git- and Vercel-ignored
-python3 -m pip install --user lameenc
-python3 tools/build-voice.py                 # records missing lines; --force re-records all
-```
+## Tests
 
-The narrator is a clear Indian English (en-IN) voice; Popo and Swiftee are character voices.
-The script finds them in Gemini's voice library (the cast and line list are at the top of it).
-To hear the candidates first, record one sample per voice and then choose:
+Headless Chromium through Python Playwright (`pip install playwright pillow`):
 
-```
-python3 tools/build-voice.py --audition          # samples in asset/voice/auditions/
-python3 tools/build-voice.py --cast popo=VOICE   # use that voice; only Popo is re-recorded
-```
+- `python3 tests/playthrough.py` – plays all six nets with real pointer drags and Drop Net
+  clicks: a miss leaves the puzzle open, a drag onto the place snaps to an exact
+  parallelogram (also through a mid-drag resize), Drop Net arms only then, every fish is
+  netted, waters change, pause freezes the game, the final card appears, Play Again starts over.
+- `python3 tests/geometry.py` – every level's solved frame is a parallelogram, its start is a
+  simple, clearly wrong frame, the snap radius is child-sized on a tablet, the net hangs clear
+  of the water and the school's water is inside the lowered net.
+- `python3 tests/rowing.py` – the paddling frames and a row to the next waters at three sizes.
+- `python3 tests/ui_layout.py` – the HUD, pause and final cards stay inside the stage at
+  three sizes, and the sound and pause controls work.
 
-The chosen voices are kept in `asset/voice/cast.json`, so later runs sound the same.
-Each clip is keyed by speaker and on-screen text: the words of a line appear as they are spoken,
-the music ducks under the voice, and a line without a clip falls back to the synthesized
-voice blips. Raw recordings are kept in `asset/voice/`.
+## Notes on the art
 
-## Notes on the supplied art
-
-- Popo's fishing and casting poses come from `asset/popo-fishing-clean.png` (character and rod
-  only). His paddling comes from `asset/popo-paddling.png`, which the build cleans of red and
-  yellow generation specks and repacks so every figure is whole. Every pose sits on one shared
-  raft at the same seat on the deck, so the raft never changes between poses.
-- The raft with its bucket and the rod come from `asset/props-new.png`; the build fits them into
-  the cells the game registers to. The hint hand is `asset/hint-hand.png`.
-- Fish come from the two fish sheets in `asset/`, sliced by grid cell with a margin so no fish
-  is cut, then cleaned of stray specks. The second sheet is drawn at twice the scale and is
-  halved. Unused cells: an irregular 9-gon, a capsule, a second right triangle, a second
-  trapezium and a star. Each used fish's side count was checked by measuring its outline, and
-  its smile is measured so the hook lands in its mouth.
+- Popo (`assets/generated/popo.png`) was generated from the original character sheet
+  (`asset/popo-fishing-clean.png`, kept for reference) without the rod; he is drawn whole,
+  breathing, with a bounce for reactions. While rowing he is the pre-rendered paddling stroke
+  of the original art (`asset/popo-paddling-rig-source.png`), scaled to the seated character.
+- The raft with its bucket comes from `asset/props-new.png`. The hint hand is `asset/hint-hand.png`.
+- `asset/winch-concept.png` was the first machine concept; the game uses the generated winch.
 - Each background gets a water mask: the surface waves move only open water, so the sky,
   mountains, ice shelves and icebergs stay still. The seaweed sway stops at the plant tips.
-- The title banner (`asset/title-banner.png`) and play button (`asset/play-button.png`) are built
-  into `assets/` and embedded as data URLs so the canvas can use them from the file system.
-- No audio files were supplied; music and effects are synthesised with the Web Audio API.
-
-## Wrong-answer reaction
-
-The existing cast takes about 0.9 seconds, followed by one 4.8-second game-clock reaction
-(about 5.7 seconds of motion). Popo says “Whoopsie Doopsie!” in his existing speech
-bubble during seated recovery, using the existing synthesized character chatter. Retry waits
-for both motion and dialogue to finish (about 6.37 seconds in the latest real-time check). The wrong
-fish remains available for retry; the correct-catch and progression flows are unchanged.
-
-| Reaction time after casting | Beat |
-| --- | --- |
-| 0–0.40 s | Fish tug, surprised expression, attached rod response |
-| 0.40–0.95 s | Brace, anticipation, loss of balance |
-| 0.95–1.45 s | Curved airborne fall and rod release |
-| 1.45–1.75 s | Water entry; splash fires on measured contact, not a timer |
-| 1.75–2.05 s | Brief visible underwater dip and bubbles |
-| 2.05–2.75 s | Buoyant resurface, blink, water rings |
-| 2.75–4.15 s | Reach, planted-paw pull, belly/feet over the rail, seat recovery |
-| 4.15–4.80 s | Sheepish recovery, original idle art and rod grip restored |
-
-`src/sequences.js` owns the time-based path and one-shot events. `src/popo.js` registers
-poses by head landmarks, uses short interpolated pose blends, clips above/below the surface,
-and pins the climb grip to the raft. The original fishing frame supplies the independent rod;
-the shared raft/bucket prop is retained. The original idle frame is used at both ends.
-`src/effects.js` draws the splash behind and in front of Popo. Existing synthesized audio
-supplies the twang, slide, splash and bubbly recovery; no voiceover assets were supplied.
-Input stays locked until recovery, and restart/disposal cancel the sequence and effects.
-The clock now rejects failed tween callbacks so cleanup can release the input lock.
-The RAF delta cap supports 15 FPS without slowing game time; hidden tabs suspend updates.
-
-### New artwork and rebuild
-
-- `asset/popo-mishap-new.png`: newly generated, subsequently alpha-cleaned Popo-only source.
-- `assets/sprites/popo-mishap.png`: lossless 2048×1024 RGBA atlas, eight padded cells.
-- `src/mishap-data.js`: generated pose boxes and attachment landmarks.
-- `tools/popo-mishap-prompt.txt`: generation prompt and processing provenance.
-- `tools/build-mishap.py`: deterministic Canvas packing; requires Python Playwright/Chromium.
-
-Run `python3 tools/build-mishap.py` to repack the cleaned source without further erosion.
-`--clean-source` is only for a fresh raw generation; it removes exterior matte/chroma noise
-and isolated specks, preserves interior features, and antialiases the boundary before saving.
-The old `popo-mishap-poses-v2` files are retained as legacy source and are no longer loaded.
-
-### Verification (9 October 2026)
-
-Run `python3 tests/mishap.py` and `python3 tests/asset_alpha.py`.
-Gameplay screenshots and measurements are written to `/tmp/popo-qa`.
-
-Passed in local headless Chromium: desktop 1600×900, laptop 1024×640, tablet 768×1024,
-mobile 390×844, reduced-motion 844×390; simulated 15/30/60 FPS; rotation/resize during
-animation; pause; 20 repeated taps; three consecutive retries; restart mid-fall; a subsequent
-correct collection; all four location waterlines; optional audio failure. A separate actual
-RAF run used the keyboard fish target, completed in 6.37 seconds including recovery dialogue, and dispatched each
-impact SFX once with a running Web Audio context. Sampled animation frames were visually
-reviewed for water clipping, pose continuity, equipment and recovery.
-
-Asset checks passed for RGBA transparency, opaque interiors, fractional-alpha edges,
-32-pixel minimum safety gutters (actual minimum 44 pixels), registered landmarks and absence
-of saturated exterior red/yellow fringe. JavaScript syntax and `git diff --check` passed.
-The project has no package-manager lint command or application compilation step; the new
-sprite packing pipeline was run successfully.
-
-Limits: animation uses eight raster key poses with short registered blends, not a skeletal
-3D rig. Physical mobile devices, Safari and subjective loudspeaker/headphone playback have
-not been validated. The checks above verify sound dispatch/timing, not perceived sound mix.
-
-Files changed for this reaction: `index.html`, `src/assets.js`, `src/clock.js`,
-`src/effects.js`, `src/game.js`, `src/popo.js`, `src/sequences.js`, and this README.
-Added files are the four artwork/registration/provenance files listed above,
-`tools/build-mishap.py`, `tests/mishap.py`, and `tests/asset_alpha.py`.
-Existing unrelated working-tree changes were retained; no repository push was made.
-
-Recovery dialogue checks also passed: exact “Whoopsie Doopsie!” text, locked input while
-visible, restart during its post-motion hold, and recovery with optional audio unavailable.
-The dialogue text is stored in `STORY.wrong` in `src/levels.js`.
+- The title banner and play button are built into `assets/` and embedded as data URLs so the
+  canvas can use them from the file system.

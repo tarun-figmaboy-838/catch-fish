@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { STAGE_W, STAGE_H, SEABED_Y } = PopoGame;
+const { STAGE_W, STAGE_H, SEABED_Y, SCENE_SHIFT } = PopoGame;
 
 const TAU = Math.PI * 2;
 
@@ -8,15 +8,15 @@ function rand(a, b) {
   return a + Math.random() * (b - a);
 }
 
-// Bounds measured on the existing paintings, expressed in logical scene coordinates.
-// Roots sit behind rocks. Only upper vegetation and the adjacent water are refracted.
+// Bounds measured on the paintings (moved down with them, see SCENE_SHIFT), in logical scene
+// coordinates. Roots sit behind rocks. Only upper vegetation and the adjacent water are refracted.
 const PLANTS = [
   [[5,145,680,845], [205,292,735,815], [1360,1518,704,854], [1550,1658,760,859]],
   [[5,140,677,842], [223,292,735,812], [1205,1290,747,827], [1390,1530,701,863], [1580,1658,788,869]],
   [[5,138,677,842], [190,263,737,810], [1400,1534,699,864], [1562,1644,739,822]],
   [[99,177,744,817], [1380,1470,750,850], [1520,1670,606,864]],
 ].map((group, location) => group.map(([left,right,top,root], i) => ({
-  left, right, top, root, phase: 1.17 + i * 2.39 + location * 0.71,
+  left, right, top: top + SCENE_SHIFT, root: root + SCENE_SHIFT, phase: 1.17 + i * 2.39 + location * 0.71,
   speed: 0.48 + i * 0.073, amp: root - top > 120 ? 3.4 : 1.5,
 })));
 
@@ -75,28 +75,6 @@ class Effects {
 
   plantsFor(index) { return PLANTS[index] || PLANTS[0]; }
 
-  plantDisplacement(x, y, plants) {
-    if (this.reduced) return 0;
-    let bend = 0;
-    for (const p of plants) {
-      if (x <= p.left || x >= p.right || y <= p.top || y >= p.root) continue;
-      const height = p.root - p.top;
-      const rootWeight = (p.root - y) / height;
-      const topFade = Math.min(1, (y - p.top) / 18);
-      const across = Math.sin((x - p.left) / (p.right - p.left) * Math.PI);
-      const rhythm = Math.sin(this.t * p.speed + p.phase) + 0.32 * Math.sin(this.t * p.speed * 0.61 + p.phase * 2);
-      bend += rhythm * p.amp * rootWeight * rootWeight * topFade * across;
-    }
-    return bend;
-  }
-
-  surfaceDisplacement(y) {
-    if (this.reduced || y <= 300 || y >= 420) return 0;
-    const envelope = Math.sin((y - 300) / 120 * Math.PI) ** 2;
-    return envelope * (Math.sin(this.t * 0.43 + y * 0.035) * 1.4
-      + Math.sin(this.t * 0.27 - y * 0.022) * 0.6);
-  }
-
   resetBubble(b, source = null) {
     const spot = source || this.sources[Math.floor(Math.random() * this.sources.length)];
     const r = rand(1.5, 3.8);
@@ -150,13 +128,7 @@ class Effects {
     for (const pool of [this.ripples, this.drops, this.sparkles, this.mouthBubbles, this.pops]) {
       for (const particle of pool) particle.life = 0;
     }
-    this.dipBubbles = [];
     for (const r of this.reactions) r.life = 0;
-  }
-
-  bubbleBurst(x, y) {
-    this.dipBubbles = Array.from({ length: this.reduced ? 2 : 4 }, (_, i) =>
-      ({ x: x + (i - 1.5) * 11, y: y + i * 7, r: 2 + i * 0.6, life: 0.55 }));
   }
 
   drips(point) {
@@ -180,7 +152,6 @@ class Effects {
 
   update(dt) {
     this.t += dt;
-    for (const b of this.dipBubbles || []) { b.y -= dt * 35; b.life -= dt; }
     const motion = this.reduced ? 0.2 : 1;
     this.sourceIn -= dt;
     if (this.sourceIn <= 0) {
@@ -369,14 +340,6 @@ class Effects {
         ctx.arc(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d * 0.7 - k * 5, Math.max(0.6, p.r * 0.22 * (1 - k * 0.6)), 0, TAU);
         ctx.fill();
       }
-    }
-    for (const b of this.dipBubbles || []) {
-      if (b.life <= 0) continue;
-      ctx.strokeStyle = `rgba(235, 250, 255, ${Math.min(0.7, b.life * 2)})`;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, b.r, 0, TAU);
-      ctx.stroke();
     }
     for (const r of this.ripples) {
       if (r.life <= 0) continue;

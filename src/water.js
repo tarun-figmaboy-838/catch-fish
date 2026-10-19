@@ -45,6 +45,7 @@ uniform float uSeabed;
 uniform float uMix;
 uniform float uAmp;
 uniform float uSurface;
+uniform float uShift;
 uniform vec4 uPlants[8];
 uniform sampler2D uMaskFrom;
 uniform sampler2D uMaskTo;
@@ -74,15 +75,18 @@ vec2 displace(vec2 p, float open) {
   return d * uAmp;
 }
 
+// The painting sits uShift pixels down the stage; above it the sky carries on, a little deeper
+// in colour toward the top.
 vec3 painting(sampler2D tex, vec2 q) {
-  vec2 uv = q / uStage;
+  vec2 uv = (q - vec2(0.0, uShift)) / uStage;
+  float above = max(0.0, -uv.y);
   uv.x = 1.0 - abs(1.0 - mod(uv.x, 2.0));
-  return texture2D(tex, clamp(uv, 0.0, 1.0)).rgb;
+  return texture2D(tex, clamp(uv, 0.0, 1.0)).rgb * (1.0 - above * 0.6);
 }
 
 // 1 over open water, 0 over the shoreline ice and land (see the water masks)
 float openWater(sampler2D mask, vec2 at) {
-  vec2 uv = at / uStage;
+  vec2 uv = (at - vec2(0.0, uShift)) / uStage;
   uv.x = 1.0 - abs(1.0 - mod(uv.x, 2.0));
   return texture2D(mask, clamp(uv, 0.0, 1.0)).r;
 }
@@ -150,7 +154,7 @@ class WaterScene {
     gl.enableVertexAttribArray(aPos);
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
     this.u = {};
-    for (const name of ['uFrom', 'uTo', 'uStage', 'uTime', 'uWater', 'uSeabed', 'uMix', 'uAmp', 'uSurface', 'uPlants', 'uMaskFrom', 'uMaskTo']) {
+    for (const name of ['uFrom', 'uTo', 'uStage', 'uTime', 'uWater', 'uSeabed', 'uMix', 'uAmp', 'uSurface', 'uShift', 'uPlants', 'uMaskFrom', 'uMaskTo']) {
       this.u[name] = gl.getUniformLocation(this.program, name);
     }
     gl.uniform1i(this.u.uFrom, 0);
@@ -220,8 +224,6 @@ class WaterScene {
     this.canvas.style.visibility = visible ? 'visible' : 'hidden';
   }
 
-  // from/to are background images; mix is the row progress (0 when not travelling).
-  // surface 0 keeps the band around the waterline still (for art with things on the surface).
   white() {
     if (this.whiteTex) return this.whiteTex;
     const gl = this.gl;
@@ -231,7 +233,10 @@ class WaterScene {
     return this.whiteTex;
   }
 
-  render({ from, to, mix, time, waterline, plants, amplitude, surface = 1, seabed = SEABED_Y }) {
+  // from/to are background images; mix is the row progress (0 when not travelling).
+  // surface 0 keeps the band around the waterline still (for art with things on the surface);
+  // shift draws the painting that far down the stage, with sky above it.
+  render({ from, to, mix, time, waterline, plants, amplitude, surface = 1, seabed = SEABED_Y, shift = 0 }) {
     const gl = this.gl;
     const fromTex = this.texture(from);
     const toTex = fromTex && this.texture(to || from);
@@ -254,6 +259,7 @@ class WaterScene {
     gl.uniform1f(this.u.uAmp, amplitude);
     gl.uniform1f(this.u.uSurface, surface);
     gl.uniform1f(this.u.uSeabed, seabed);
+    gl.uniform1f(this.u.uShift, shift);
     const data = new Float32Array(32);
     plants.slice(0, 8).forEach((p, i) => data.set([p.left, p.right, p.top, p.root], i * 4));
     gl.uniform4fv(this.u.uPlants, data);

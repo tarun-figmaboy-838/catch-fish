@@ -10,7 +10,13 @@ const game = new Game({ stage, ui, audio });
 ui.on('play', () => game.pressPlay());
 ui.on('playHover', (on) => game.onPlayHover(on));
 ui.on('playPress', () => game.onPlayPress());
-ui.on('fishTap', (fish, point) => game.onFishTap(fish, point));
+ui.on('dragStart', (point) => game.onDragStart(point));
+ui.on('dragMove', (point) => game.onDragMove(point));
+ui.on('dragEnd', () => game.onDragEnd());
+ui.on('nudge', (dx, dy) => game.onNudge(dx, dy));
+ui.on('tryHandle', () => game.onTryHandle());
+ui.on('drop', () => game.onDrop());
+ui.on('again', () => { audio.play('ui'); game.playAgain(); });
 document.getElementById('stage').addEventListener('pointerdown', (e) => {
   if (e.target.closest('button, .hud, .overlay')) return;
   if (game.skipDialogue()) return;
@@ -20,7 +26,6 @@ ui.on('pause', () => { audio.play('ui'); game.togglePause(); });
 ui.on('resume', () => { audio.play('ui'); game.togglePause(); });
 ui.on('restart', () => { audio.play('ui'); game.restart(); });
 ui.on('sound', () => { game.toggleSound(); audio.play('ui'); });
-ui.on('next', () => { audio.play('ui'); game.next(); });
 
 try {
   if (localStorage.getItem('popo-muted') === '1') {
@@ -42,7 +47,7 @@ document.addEventListener('visibilitychange', () => {
   else if (!state.paused) audio.resume();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && state.phase !== PHASE.INTRO) game.togglePause();
+  if (e.key === 'Escape' && state.phase !== PHASE.TITLE) game.togglePause();
 });
 game.resize();
 

@@ -4,7 +4,7 @@
 // Number keys 1–9 and 0 press the buttons in order; ` folds the panel away.
 if (new URLSearchParams(location.search).get('dev') !== '1') return;
 
-const { state, PHASE, LOCATIONS, STORY, matchesTarget, travelTo, discovery, finale } = PopoGame;
+const { state, PHASE, LEVELS, snapCorner, rowTo, celebrate, newToken } = PopoGame;
 
 function game() {
   return window.popoDebug && window.popoDebug.game;
@@ -12,7 +12,7 @@ function game() {
 
 // Leaves the title (as Play would) without starting the opening story.
 function begin(g) {
-  if (state.phase === PHASE.INTRO) {
+  if (state.phase === PHASE.TITLE) {
     g.titleFade = 0;
     g.audio.init();
     g.audio.resume();
@@ -23,25 +23,16 @@ function begin(g) {
   g.reset();
 }
 
-function atLocation(g, index) {
-  begin(g);
-  state.locationIndex = index;
-  state.challengeIndex = 0;
-  g.applyLocation();
-}
-
+// Straight to a level: its waters, its school already swimming and its net in place.
 function level(index) {
   const g = game();
-  atLocation(g, index);
-  g.tutorialPending = false;
-  g.setupChallenge();
-}
-
-function tapFish(right) {
-  const g = game();
-  if (state.phase !== PHASE.READY) level(state.phase === PHASE.INTRO ? 0 : state.locationIndex);
-  const fish = state.fish.find((f) => !f.gone && !f.offstage && matchesTarget(f.key, state.target) === right);
-  if (fish) g.onFishTap(fish, null);
+  begin(g);
+  state.locationIndex = LEVELS[index].location;
+  g.applyLocation();
+  g.prepareLevel(index);
+  g.spawnSchool();
+  g.net.visible = true;
+  g.beginPuzzle();
 }
 
 const JUMPS = [
@@ -53,22 +44,31 @@ const JUMPS = [
     g.showIdleScene();
   }],
   ['Intro', () => { const g = game(); begin(g); g.restart(); }],
-  ...LOCATIONS.map((loc, i) => [`L${i + 1} ${loc.name.split(' ')[0]}`, () => level(i)]),
-  ['Catch ✓', () => tapFish(true)],
-  ['Wrong ✗', () => tapFish(false)],
+  ...LEVELS.map((lv, i) => [`L${i + 1}`, () => level(i)]),
+  ['Solve', () => {
+    const g = game();
+    if (state.phase !== PHASE.PUZZLE_READY) level(state.level);
+    g.net.setHandle(g.net.target);
+    snapCorner(g);
+  }],
+  ['Drop', () => { const g = game(); if (state.phase === PHASE.DROP_READY) g.onDrop(); }],
   ['Row on', () => {
     const g = game();
-    const from = state.phase === PHASE.INTRO ? 0 : Math.min(state.locationIndex, LOCATIONS.length - 2);
-    atLocation(g, from);
-    travelTo(g, from + 1);
+    begin(g);
+    const from = Math.min(state.locationIndex, 2);
+    state.locationIndex = from;
+    g.applyLocation();
+    g.net.visible = true;
+    const token = newToken();
+    state.phase = PHASE.TRANSITIONING;
+    rowTo(g, from + 1, token).then(() => { g.prepareLevel(state.level); g.spawnSchool(); g.beginPuzzle(); }).catch(() => {});
   }],
-  ['Mystery fish', () => { const g = game(); atLocation(g, LOCATIONS.length - 1); discovery(g); }],
-  ['Swiftee', () => { const g = game(); atLocation(g, LOCATIONS.length - 1); finale(g); }],
+  ['Finish', () => { const g = game(); level(LEVELS.length - 1); celebrate(g, newToken()).catch(() => {}); }],
 ];
 
 const css = document.createElement('style');
 css.textContent = `
-.dev-panel { position: fixed; left: 8px; top: 8px; z-index: 50; display: flex; flex-wrap: wrap; gap: 4px;
+.dev-panel { position: fixed; left: 8px; bottom: 8px; z-index: 50; display: flex; flex-wrap: wrap; gap: 4px;
   max-width: min(560px, 33vw); padding: 6px; border-radius: 10px; background: rgba(10, 20, 40, 0.82);
   font: 600 12px/1 system-ui, sans-serif; color: #fff; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
 .dev-panel button { font: inherit; padding: 6px 8px; border: 0; border-radius: 6px; background: #2f4f7f; color: #fff; cursor: pointer; }

@@ -1,8 +1,11 @@
 (function (PopoGame) {
 'use strict';
-const { assets, preloadBackground, clock, Effects, WaterScene, surfaceWave, PAN_OVERLAP, spawnFish, spawnSwimmers, refreshShadows, LOCATIONS, STORY, matchesTarget, challengeFish, getShape, Popo, correctCatch, wrongCatch, travelTo, tutorial, opening, discovery, mouthOf, Cancelled, STAGE_W, STAGE_H, swimArea, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
+const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, spawnFish, spawnSchool, refreshShadows, LOCATIONS, LEVELS, schoolFor, Popo, Winch, Net, opening, startLevels, snapCorner, dropNet, Cancelled, STAGE_W, STAGE_H, SCENE_SHIFT, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
 
-const HINT_DELAY = 4;
+const HINT_REPEAT = 7;    // seconds of idling between hints once one has been shown
+const NET_CLEARANCE = 40; // the net's bottom edge hangs this far above the water
+const SCHOOL_TOP = 55;    // the school keeps this far below the surface
+const SCHOOL_MARGIN = 26; // and this far inside the net's footprint
 
 // The title banner: its water surface, sand line, the open water the decorative fish swim
 // in, where the hooked fish splashes, and sparkle points along the logo's snowy edges.
@@ -22,13 +25,14 @@ const TITLE = {
   twinkles: [[884, 118], [1092, 86], [1360, 62], [1598, 142], [1588, 300], [962, 334]],
 };
 
-
 class Game {
   constructor({ stage, ui, audio }) {
     this.stage = stage;
     this.ui = ui;
     this.audio = audio;
     this.popo = new Popo();
+    this.winch = new Winch();
+    this.net = new Net();
     this.fx = new Effects();
     this.water = new WaterScene(document.getElementById('water'));
     this.titleFx = new Effects();
@@ -39,35 +43,29 @@ class Game {
     this.titleSplashIn = 0.8;
     this.raftRippleIn = 1;
     this.dialogue = null;
-    this.leaper = null;
     this.leapers = [];
-    this.swiftee = null;
     this.poof = null;
-    this.awaitingNext = false;
     this.ambient = [];
     this.hop = null;
-    this.mark = null;
-    this.fishFade = 1;
     this.waterQuality = 1;
     this.frameAvg = 1 / 60;
     this.slowFor = 0;
     this.surfaceColors = [];
-    this.tutorialPending = false;
-    this.waterline = LOCATIONS[0].waterline;
-    this.area = swimArea(this.waterline);
     this.transition = null;
-    this.handFish = null;
-    this.instructionRevert = 0;
+    this.fishArea = null;
+    this.hint = null;
+    this.hintShown = false;
+    this.drag = null;
     this.lastFrame = 0;
     this.running = false;
     ui.setScale(stage.scale);
+    this.applyLocation();
   }
 
   // --- lifecycle ------------------------------------------------------------
   // The world renders behind the start screen as soon as the art is ready.
   showIdleScene() {
-    this.applyLocation();
-    if (state.phase === PHASE.INTRO && !this.titleFish.length) {
+    if (state.phase === PHASE.TITLE && !this.titleFish.length) {
       const orbit = spawnFish(TITLE.orbit.fish, TITLE.sides[0].area, 0.46);
       orbit.forEach((f, i) => { f.orbit = (i / orbit.length) * Math.PI * 2; });
       const sides = TITLE.sides.flatMap((side) => spawnFish(side.fish, side.area, 0.46).map((f) => Object.assign(f, { zone: side.area })));
@@ -81,24 +79,25 @@ class Game {
   }
 
   start() {
-    if (state.phase === PHASE.INTRO) this.titleFade = 1;
+    this.titleFade = 1;
     this.audio.init();
     this.audio.resume();
     this.audio.startMusic();
-    resetProgress();
+    this.reset();
     this.ui.hideStart();
     this.ui.showHud();
-    this.applyLocation();
-    this.ui.setHitsEnabled(false);
-    this.tutorialPending = true;
     opening(this);
     this.showIdleScene();
   }
 
   restart() {
     this.reset();
-    this.tutorialPending = true;
     opening(this);
+  }
+
+  playAgain() {
+    this.reset();
+    startLevels(this);
   }
 
   // Cancels every sequence and clears the scene back to the first location, ready to play.
@@ -109,33 +108,30 @@ class Game {
     this.audio.stopEffects();
     this.audio.stopVoice();
     this.audio.setTravel(false);
-    this.instructionRevert = 0;
     this.transition = null;
     this.ui.showPause(false);
+    this.ui.showComplete(false);
     this.ui.hideHand();
-    this.ui.clearHits();
-    this.handFish = null;
+    this.ui.showHandle(false);
+    this.ui.setDrop('hidden');
     const muted = state.muted;
     resetProgress();
     state.muted = muted;
-    state.paused = false;
     this.audio.resume();
     this.popo = new Popo();
+    this.winch = new Winch();
+    this.net = new Net();
     this.ambient = [];
-    this.hop = null;
-    this.mark = null;
-    this.fishFade = 1;
-    this.endLine();
-    this.leaper = null;
-    this.swiftee = null;
     this.leapers = [];
+    this.hop = null;
     this.poof = null;
-    this.awaitingNext = false;
-    this.ui.hideNext();
+    this.hint = null;
+    this.drag = null;
+    this.endLine();
     this.ui.setInstruction('');
     this.ui.el.hud.inert = false;
-    this.nextNudge = 3;
     this.applyLocation();
+    this.prepareLevel(0);
   }
 
   dispose() {
@@ -144,225 +140,216 @@ class Game {
     clock.cancelAll();
     this.audio.setTravel(false);
     this.transition = null;
-    this.handFish = null;
-    this.instructionRevert = 0;
     this.fx.clearTransient();
     this.audio.stopEffects();
     this.audio.stopMusic();
-    this.popo.endMishap();
     this.endLine();
     this.ui.hideHand();
-    this.ui.setHitsEnabled(false);
-    state.selectedFish = null;
-    state.phase = PHASE.INTRO;
+    this.ui.showHandle(false);
+    state.phase = PHASE.TITLE;
   }
 
   applyLocation() {
     const loc = LOCATIONS[state.locationIndex];
-    this.setWaterline(loc.waterline);
+    this.setWaterline(this.locationWaterline(state.locationIndex));
     this.fx.setLocation(loc.background);
     if (state.locationIndex + 1 < LOCATIONS.length) preloadBackground(LOCATIONS[state.locationIndex + 1].background);
   }
 
+  locationWaterline(index) {
+    return LOCATIONS[index].waterline + SCENE_SHIFT;
+  }
+
   setWaterline(y) {
     this.waterline = y;
-    this.area = swimArea(y);
     this.fx.setWaterline(y);
     const a = raftAnchor(y);
     this.popo.setAnchor(a.x, a.y);
+    // where the net's ring hangs at rest, with the raft still
+    this.netRest = { x: a.x + this.winch.hang.x, y: a.y + this.winch.hang.y };
+    this.area = { left: 40, right: STAGE_W - 40, top: y + SCHOOL_TOP, bottom: STAGE_H - 30 };
   }
 
-  locationWaterline(index) {
-    return LOCATIONS[index].waterline;
+  // --- levels -----------------------------------------------------------------
+  // Sets up a level's net under the boom and the water its school keeps to. Returns the
+  // frame the net had before, so a transition can morph from it.
+  prepareLevel(index) {
+    state.level = index;
+    const level = LEVELS[index];
+    const before = this.net.points.map((p) => ({ ...p }));
+    this.net.setLevel(level, this.waterline - NET_CLEARANCE - this.netRest.y);
+    const span = this.net.innerSpan();
+    const top = this.waterline + SCHOOL_TOP;
+    this.fishArea = {
+      left: this.netRest.x + span.left + SCHOOL_MARGIN, right: this.netRest.x + span.right - SCHOOL_MARGIN,
+      top, bottom: top + level.height - 40,
+    };
+    this.hintShown = false;
+    this.ui.setLevel(index, LEVELS.length);
+    this.ui.setCaught(state.banked);
+    return before;
   }
 
-  currentChallenge() {
-    return LOCATIONS[state.locationIndex].challenges[state.challengeIndex];
+  spawnSchool() {
+    state.fish = spawnSchool(schoolFor(LEVELS[state.level]), this.fishArea);
+    this.ambient = refreshShadows(this.ambient, 4, this.area);
   }
 
-  spawnChallengeFish() {
-    const ch = this.currentChallenge();
-    state.target = ch.target;
-    state.selectedFish = null;
-    state.fish = spawnSwimmers(challengeFish(ch), this.area, ch.fishScale || 1);
-    // fewer background shadows when the challenge itself is busy
-    this.ambient = refreshShadows(this.ambient, Math.max(3, Math.min(5, 8 - state.fish.length)), this.area);
+  // The first school swims in on the narrator's cue (or straight away on Play Again).
+  fishIn() {
+    if (state.fish.length) return;
+    this.spawnSchool();
+    this.audio.play('bloop');
+  }
+
+  // The net takes its next shape: every corner glides from where it was to its new place.
+  async morphNet(before, token) {
+    const net = this.net;
+    const after = net.points.map((p) => ({ ...p }));
+    net.locked = true;
+    await clock.tween(650, token, (t) => {
+      const k = ease.inOut(t);
+      net.points = after.map((p, i) => ({ x: before[i].x + (p.x - before[i].x) * k, y: before[i].y + (p.y - before[i].y) * k }));
+    });
+    net.points = after;
+  }
+
+  beginPuzzle() {
+    const level = LEVELS[state.level];
+    state.phase = PHASE.PUZZLE_READY;
     state.idleTime = 0;
-    state.hintShown = false;
-    this.ui.setInstruction(this.challengeText());
+    state.misses = 0;
+    this.net.locked = false;
+    this.parallel = [this.net.pairParallel(0), this.net.pairParallel(1)];
+    this.popo.idle();
+    this.ui.showHandle(true);
+    this.ui.setDrop('disabled');
+    this.ui.setInstruction(level.instruction);
+    this.speak(level.instruction);
   }
 
-  challengeText() {
-    const ch = this.currentChallenge();
-    const name = getShape(ch.target).name.toLowerCase();
-    return ch.all ? `Catch all the *${name}* fish!` : `Catch the *${name}* fish!`;
+  // Reads an instruction aloud (when it has a recording) for children who can't read it yet.
+  // Returns the recording's length in seconds, so text changes can wait for it.
+  speak(text) {
+    return this.dialogue ? 0 : this.audio.speak('narrator', text);
   }
 
-
-  // A wrong catch keeps the instruction but names the fish that was tapped.
-  wrongText(fish) {
-    return `${this.challengeText().replace(/!$/, '')}, not the ${fish.shape.name.toLowerCase()} one!`;
+  // How far the ring must drop for the net's bottom edge to pass under the whole school.
+  catchDepth() {
+    return this.fishArea.bottom + 14 - (this.netRest.y + this.net.bottom());
   }
 
-
-  remainingTargets() {
-    return state.fish.filter((f) => !f.gone && matchesTarget(f.key, state.target));
+  // The net breaking the surface: splashes under its bottom corners and in the middle.
+  netSplash() {
+    const [, , c, d] = this.net.points.map((p) => this.net.toStage(p));
+    for (const x of [d.x + 20, (c.x + d.x) / 2, c.x - 20]) this.fx.splash(x, this.waterline, false);
+    this.fx.ripple((c.x + d.x) / 2, this.waterline + 4, 1.4);
+    this.audio.play('splashSmall');
   }
 
-  inViewTarget() {
-    return this.remainingTargets().find((f) => !f.offstage && !f.escaping) || null;
-  }
-
-  // Fish swim in and out of view; while a challenge is on, at least one fish still to catch
-  // is always swimming in sight, and the tutorial hand moves to it when its fish swims off.
-  keepTargetsInView() {
-    if (state.phase !== PHASE.READY && state.phase !== PHASE.TUTORIAL) return;
-    const left = this.remainingTargets();
-    if (left.length && !left.some((f) => !f.offstage)) {
-      const soonest = left.reduce((a, b) => (a.away <= b.away ? a : b));
-      soonest.away = Math.min(soonest.away, 0);
-    }
-    if (this.handFish && (this.handFish.gone || this.handFish.offstage)) {
-      const next = this.inViewTarget();
-      if (next) this.handFish = next;
-    }
-  }
-
-  // After a catch: a catch-all challenge carries on while matching fish remain.
-  afterCatch() {
-    if (this.currentChallenge().all && this.remainingTargets().length > 0) {
-      state.selectedFish = null;
-      state.idleTime = 0;
-      state.hintShown = false;
-      this.ui.setInstruction(this.challengeText());
-      state.phase = PHASE.READY;
-      this.ui.setHitsEnabled(true);
-      return;
-    }
-    this.nextChallenge();
-  }
-
-  setupChallenge() {
-    this.spawnChallengeFish();
-    if (!this.currentChallenge().tutorial) {
-      this.tutorialPending = false;
-      this.showHandOn(null);
-      this.ui.hideHand();
-    }
-    state.phase = PHASE.READY;
-    this.ui.setHitsEnabled(true);
-    this.speakInstruction();
-  }
-
-  // Reads the instruction aloud (when it has a recording) for children who can't read it yet.
-  speakInstruction() {
-    if (!this.dialogue) this.audio.speak('narrator', this.challengeText());
-  }
-
-  nextChallenge() {
-    const loc = LOCATIONS[state.locationIndex];
-    state.challengeIndex += 1;
-    if (state.challengeIndex < loc.challenges.length) {
-      this.setupChallenge();
-    } else if (state.locationIndex + 1 < LOCATIONS.length) {
-      travelTo(this, state.locationIndex + 1);
-    } else if (STORY.ending) {
-      discovery(this);
-    } else {
-      this.complete();
+  // Fish just under the descending frame slow down and keep under it.
+  herdFish() {
+    const bottom = this.net.ring().y + this.net.bottom();
+    const centerX = this.net.ring().x;
+    for (const f of state.fish) {
+      if (f.gone || f.caught) continue;
+      if (f.y - bottom < 110 && f.y - bottom > -40) f.herd(centerX);
     }
   }
 
-  // Next, after Swiftee's line, closes the story and opens the summary.
-  next() {
-    if (!this.awaitingNext || state.paused) return;
-    this.awaitingNext = false;
-    if (this.swiftee) this.swiftee.onDownstroke = null;
-    this.ui.hideNext();
-    this.endLine(false);
-    this.complete();
-  }
-
-  // The end of the journey: tell any page hosting the game, then go back to the title, ready
-  // to play again (there is no end screen).
-  complete() {
-    state.phase = PHASE.COMPLETE;
-    this.ui.setHitsEnabled(false);
-    this.audio.play('complete');
-    const detail = { shapes: [...state.discovered] };
+  announceComplete() {
+    const detail = { levels: LEVELS.length, fish: state.caught };
     window.dispatchEvent(new CustomEvent('popo:complete', { detail }));
     if (window.parent !== window) window.parent.postMessage({ type: 'popo:complete', ...detail }, '*');
-    this.backToTitle();
-  }
-
-  backToTitle() {
-    this.reset();
-    this.titleFade = 0;
-    this.audio.stopMusic();
-    this.ui.showStart();
-    this.showIdleScene();
-  }
-
-  collect(fish) {
-    state.collected.push(fish.key);
-    state.discovered.add(fish.shape.shape);
   }
 
   // --- input ----------------------------------------------------------------
-  // Hit targets are larger than the fish, so when two overlap the fish whose body is
-  // nearest the pointer wins rather than whichever button happens to be on top.
-  fishAt(point, fallback) {
-    let best = fallback;
-    let bestScore = Infinity;
-    for (const f of state.fish) {
-      if (f.gone || f.escaping || f.offstage) continue;
-      const r = f.hitRect();
-      if (point.x < r.x || point.x > r.x + r.w || point.y < r.y || point.y > r.y + r.h) continue;
-      const score = Math.hypot((point.x - f.x) / f.w, (point.y - f.y) / f.h);
-      if (score < bestScore) {
-        bestScore = score;
-        best = f;
-      }
-    }
-    return best;
+  onDragStart(point) {
+    if (state.paused || state.phase !== PHASE.PUZZLE_READY) return;
+    state.phase = PHASE.DRAGGING;
+    this.stopHint();
+    const handle = this.net.points[this.net.movable];
+    const local = this.net.toNet(point);
+    // the corner keeps its offset from the pointer, so it never jumps under the finger
+    this.drag = { dx: handle.x - local.x, dy: handle.y - local.y };
+    this.audio.play('grab');
   }
 
-  puffFrom(fish, count, big = false) {
-    this.fx.puff(fish.x + fish.dir * fish.w * 0.42 * fish.scale, fish.y + fish.h * 0.1 * fish.scale, fish.dir, count, big);
+  onDragMove(point) {
+    if (state.phase !== PHASE.DRAGGING) return;
+    const local = this.net.toNet(point);
+    this.net.moveHandle({ x: local.x + this.drag.dx, y: local.y + this.drag.dy });
+    this.noticeParallel();
   }
 
-  // Splashes make nearby fish dart away; a catch makes the others wiggle and blow bubbles.
-  startleAround(point, radius = 320, except = null) {
-    for (const f of state.fish) {
-      if (f === except || f.gone || f === state.selectedFish) continue;
-      if (Math.hypot(f.x - point.x, f.y - point.y) < radius) f.startle(point);
-    }
+  // A soft tick the moment a pair of sides lines up, so the child hears what the marks show.
+  noticeParallel() {
+    const now = [this.net.pairParallel(0), this.net.pairParallel(1)];
+    if ((now[0] && !this.parallel[0]) || (now[1] && !this.parallel[1])) this.audio.play('parallel');
+    this.parallel = now;
   }
 
-  cheer() {
-    for (const f of state.fish) {
-      if (f.gone || f.frozen) continue;
-      f.wiggle();
-      f.puffs += 3;
+  onDragEnd() {
+    if (state.phase !== PHASE.DRAGGING) return;
+    this.drag = null;
+    this.tryCorner();
+  }
+
+  // Let go (or Enter): close enough snaps home; otherwise the corner stays where it is,
+  // with a soft wobble, and after a couple of tries the hint comes sooner.
+  tryCorner() {
+    if (this.net.withinReach) {
+      snapCorner(this);
+      return;
     }
+    state.phase = PHASE.PUZZLE_READY;
+    state.misses += 1;
+    state.idleTime = state.misses >= 2 ? LEVELS[state.level].hintDelay - 1.5 : 0;
+    this.net.wobble = 1;
+    this.audio.play('wobble');
+  }
+
+  onNudge(dx, dy) {
+    if (state.paused || state.phase !== PHASE.PUZZLE_READY) return;
+    this.stopHint();
+    state.idleTime = 0;
+    const p = this.net.points[this.net.movable];
+    this.net.moveHandle({ x: p.x + dx, y: p.y + dy });
+    this.noticeParallel();
+  }
+
+  onTryHandle() {
+    if (state.paused || state.phase !== PHASE.PUZZLE_READY) return;
+    this.stopHint();
+    this.tryCorner();
+  }
+
+  onDrop() {
+    if (state.paused || state.phase !== PHASE.DROP_READY) return;
+    this.stopHint();
+    this.audio.play('ui');
+    dropNet(this);
   }
 
   // Tapping the water is just for fun: bubbles, a soft bloop, and curious fish come to look.
   onWaterTap(point) {
-    if (state.phase === PHASE.INTRO) {
+    if (state.phase === PHASE.TITLE) {
       this.onTitleTap(point);
       return;
     }
-    if (state.paused || state.phase === PHASE.COMPLETE) return;
-    if (point.y < this.waterline) return;
+    if (state.paused || state.phase === PHASE.GAME_COMPLETE || point.y < this.waterline) return;
     this.fx.puff(point.x, point.y, 0, 5, true);
     if (point.y < this.waterline + 40) this.fx.ripple(point.x, this.waterline, 0.6);
     this.audio.play('bloop');
     for (const f of state.fish) {
-      if (f.gone || f === state.selectedFish) continue;
+      if (f.gone || f.offstage) continue;
       if (Math.hypot(f.x - point.x, f.y - point.y) < 300) f.lookAt(point);
     }
     this.fishReacts(point);
+  }
+
+  puffFrom(fish, count, big = false) {
+    this.fx.puff(fish.x + fish.dir * fish.w * 0.42 * fish.scale, fish.y + fish.h * 0.1 * fish.scale, fish.dir, count, big);
   }
 
   // The fish nearest a tap does something silly: a somersault and a giggle, a burst of
@@ -372,7 +359,7 @@ class Game {
     let near = null;
     let best = 230;
     for (const f of [...state.fish, ...this.ambient]) {
-      if (f.gone || f.frozen || f.escaping || f === state.selectedFish || !f.flip) continue;
+      if (f.gone || f.offstage || f.frozen || f.entering || !f.flip) continue;
       const d = Math.hypot(f.x - point.x, f.y - point.y);
       if (d < best && (f.reactedAt || 0) < now - 1200) { best = d; near = f; }
     }
@@ -406,19 +393,19 @@ class Game {
   }
 
   onPlayHover(on) {
-    if (state.phase !== PHASE.INTRO) return;
+    if (state.phase !== PHASE.TITLE) return;
     this.playAnim.hoverTarget = on ? 1 : 0;
     if (on) this.audio.play('bloop');
   }
 
   onPlayPress() {
-    if (state.phase !== PHASE.INTRO) return;
+    if (state.phase !== PHASE.TITLE) return;
     this.playAnim.press = 1;
   }
 
   // Play: the button pops, bubbles and sparkles burst out, the fish scatter, the game begins.
   pressPlay() {
-    if (state.phase !== PHASE.INTRO || !assets.title) return;
+    if (state.phase !== PHASE.TITLE || !assets.title) return;
     const { x, y, r } = TITLE.play;
     this.audio.init();
     this.audio.resume();
@@ -438,41 +425,16 @@ class Game {
     this.start();
   }
 
-  onFishTap(tapped, point) {
-    const fish = point ? this.fishAt(point, tapped) : tapped;
-    if (state.paused || state.phase !== PHASE.READY || state.selectedFish || fish.gone || fish.escaping || fish.offstage) return;
-    state.selectedFish = fish;
-    state.idleTime = 0;
-    for (const f of state.fish) if (f !== fish) f.frozen = false;
-    this.clearHint();
-    this.puffFrom(fish, 4, true);
-    this.instructionRevert = 0;
-    this.ui.setInstruction(this.challengeText());
-    if (matchesTarget(fish.key, state.target)) {
-      this.tutorialPending = false;
-      if (this.handFish) { this.ui.hideHand(); this.handFish = null; }
-      correctCatch(this, fish);
-    } else {
-      wrongCatch(this, fish);
-    }
-  }
-
-  showHandOn(fish) {
-    this.handFish = fish || null;
-    if (fish) this.ui.showHand();
-  }
-
-  // The tutorial hand stays until the first correct tap, so it comes back after a wrong one.
-  restoreTutorialHand() {
-    if (!this.tutorialPending || state.phase !== PHASE.READY) return;
-    this.showHandOn(this.inViewTarget());
-  }
-
   togglePause() {
-    if (state.phase === PHASE.INTRO || state.phase === PHASE.COMPLETE) return;
+    if (state.phase === PHASE.TITLE || state.phase === PHASE.GAME_COMPLETE) return;
     state.paused = !state.paused;
+    if (state.paused && state.phase === PHASE.DRAGGING) {
+      this.drag = null;
+      state.phase = PHASE.PUZZLE_READY;
+    }
     this.ui.showPause(state.paused);
     this.ui.el.hud.inert = state.paused; // nothing behind the pause card can be pressed
+    this.ui.el.hits.inert = state.paused;
     if (!state.paused) this.ui.el.pause.focus({ preventScroll: true });
     if (state.paused) this.audio.suspend();
     else this.audio.resume();
@@ -489,9 +451,9 @@ class Game {
   resize() {
     this.stage.resize();
     this.ui.setScale(this.stage.scale);
-    // keep the bubble and the hint hand on their targets even while paused
+    // keep the bubble, the corner and the hint on their marks even while paused
     if (this.dialogue && this.dialogue.who !== 'narrator') this.placeSpeech();
-    if (this.handFish && !this.handFish.gone) this.ui.moveHand(this.handFish.x + 10, this.handFish.y + this.handFish.h * 0.3);
+    this.placeHandle();
     this.ui.showRotateHint(this.stage.portrait);
     this.syncWaterCanvas();
   }
@@ -513,40 +475,61 @@ class Game {
     }
   }
 
-  // Shows feedback for a while, then brings the challenge instruction back.
-  revertInstructionIn(ms) {
-    this.instructionRevert = ms;
-  }
-
-  updateInstruction(dt) {
-    if (this.instructionRevert <= 0) return;
-    this.instructionRevert -= dt * 1000;
-    if (this.instructionRevert <= 0 && state.phase === PHASE.READY) {
-      this.ui.setInstruction(this.challengeText());
-    }
-  }
-
   // --- hints ------------------------------------------------------------------
-  clearHint() {
-    for (const f of state.fish) f.hinted = false;
+  // Left alone for a while, the hand appears on the corner and shows the drag once: along
+  // the way to where the corner belongs, then it fades. Once the net is ready, the hand taps
+  // on Drop Net instead. Any touch cancels it.
+  updateHint(dt) {
+    const puzzle = state.phase === PHASE.PUZZLE_READY;
+    if (!puzzle && state.phase !== PHASE.DROP_READY) return;
+    if (this.hint) {
+      if (puzzle) this.advanceHint(dt);
+      else if ((this.hint.t += dt) > 2.4) { this.stopHint(); state.idleTime = 0; }
+      return;
+    }
+    state.idleTime += dt;
+    const delay = this.hintShown ? HINT_REPEAT : puzzle ? LEVELS[state.level].hintDelay : 4;
+    if (state.idleTime > delay) this.showHint(puzzle);
   }
 
-  updateHint(dt) {
-    if (state.phase !== PHASE.READY || state.selectedFish) return;
-    state.idleTime += dt;
-    if (state.idleTime > HINT_DELAY && !state.hintShown) {
-      state.hintShown = true;
-      const target = this.inViewTarget();
-      if (target) target.hinted = true;
-      this.ui.pulseTarget();
-      this.audio.play('hint');
-      this.speakInstruction();
+  showHint(puzzle) {
+    this.hint = { t: 0 };
+    this.ui.pulseInstruction();
+    this.audio.play('hint');
+    if (puzzle) {
+      this.ui.showHand(true);
+      if (!this.hintShown) this.speak(LEVELS[state.level].instruction);
+    } else {
+      const d = this.ui.dropPoint();
+      this.ui.moveHand(d.x - 8, d.y - 6);
+      this.ui.showHand(false);
     }
-    if (state.idleTime > HINT_DELAY + 3) {
-      this.clearHint();
+    this.hintShown = true;
+  }
+
+  advanceHint(dt) {
+    const h = this.hint;
+    h.t += dt;
+    const from = this.net.handle();
+    const to = this.net.toStage(this.net.target);
+    const k = ease.inOut(Math.min(1, Math.max(0, (h.t - 0.5) / 1.2)));
+    this.ui.moveHand(from.x + (to.x - from.x) * k + 6, from.y + (to.y - from.y) * k + 6);
+    if (h.t > 2.1) this.ui.fadeHand();
+    if (h.t > 2.4) {
+      this.stopHint();
       state.idleTime = 0;
-      state.hintShown = false;
     }
+  }
+
+  stopHint() {
+    if (!this.hint) return;
+    this.hint = null;
+    this.ui.hideHand();
+  }
+
+  placeHandle() {
+    const h = this.net.handle();
+    this.ui.placeHandle(h.x, h.y);
   }
 
   // --- travel -----------------------------------------------------------------
@@ -558,7 +541,6 @@ class Game {
   finishTransition(nextIndex) {
     this.transition = null;
     state.locationIndex = nextIndex;
-    state.challengeIndex = 0;
     this.applyLocation();
   }
 
@@ -577,15 +559,14 @@ class Game {
 
   // Shows one story line word by word, with comic pauses after punctuation and a boing on
   // *stressed* words. A line's cue fires when its word appears (or when a tap skips ahead).
-  // Resolves once the line has been on screen long enough to read; a `stay` line then remains
-  // on screen until endLine().
+  // Resolves once the line has been on screen long enough to read.
   say(line, token) {
     return new Promise((resolve, reject) => {
       if (this.dialogue) this.endLine();
       const words = line.text.split(' ').map((raw) => ({ text: raw.replace(/\*/g, ''), em: raw.includes('*') }));
       const narrator = line.who === 'narrator';
       this.dialogue = {
-        words, who: line.who, cue: line.cue, cueDone: false, token, resolve, reject, stay: !!line.stay, settled: false,
+        words, who: line.who, cue: line.cue, cueDone: false, token, resolve, reject, settled: false,
         next: 0, wait: 0, held: 0,
         pace: narrator ? 0.21 : 0.17,
         hold: (narrator ? 1000 : 700) + line.text.length * (narrator ? 26 : 22),
@@ -616,19 +597,8 @@ class Game {
   }
 
   placeSpeech() {
-    const bird = this.dialogue && this.dialogue.who === 'swiftee' && this.swiftee;
-    if (bird) {
-      const h = bird.head();
-      this.ui.placeSpeech(h.x, h.y);
-      return;
-    }
-    const p = this.popo;
-    if (p.mishap) {
-      const head = p.bodyLandmark('head');
-      this.ui.placeSpeech(head.x + 38, head.y - 63);
-      return;
-    }
-    this.ui.placeSpeech(p.anchor.x + 78 + p.travelShift, p.anchor.y - 238 + p.bob);
+    const head = this.popo.headTop();
+    this.ui.placeSpeech(head.x + 36, head.y + 16);
   }
 
   endLine(cancelled = true) {
@@ -648,10 +618,10 @@ class Game {
     this.ui.revealWord(i, word.em);
     const cued = d.cue && !d.cueDone && d.cue.word <= i;
     if (!quiet && !cued) {
-      try { this.audio.play(word.em ? 'boing' : ({ popo: 'talk', swiftee: 'chirp' })[d.who] || 'word'); }
-      catch (e) { /* Optional audio must not stall dialogue or retain input locks. */ }
+      try { this.audio.play(word.em ? 'boing' : d.who === 'popo' ? 'talk' : 'word'); }
+      catch (e) { /* Optional audio must not stall dialogue. */ }
     }
-    if (d.cue && !d.cueDone && d.cue.word <= i) {
+    if (cued) {
       d.cueDone = true;
       this.storyCue(d.cue.do);
     }
@@ -688,13 +658,9 @@ class Game {
       }
     } else {
       d.held += dt * 1000;
-      if (d.held >= d.hold && !d.stay) {
+      if (d.held >= d.hold) {
         this.endLine(false);
         return;
-      }
-      if (d.held >= d.hold && !d.settled) {
-        d.settled = true;
-        d.resolve();
       }
     }
     if (d.who !== 'narrator') this.placeSpeech();
@@ -705,63 +671,28 @@ class Game {
     if (name === 'hop') {
       this.hop = { t: 0 };
       this.audio.play('boing');
-    } else if (name === 'exclaim') {
-      this.mark = { char: '!', t: 0, colour: '#ffd23f' };
-      this.audio.play('woah');
-    } else if (name === 'wonder') {
-      this.mark = { char: '?', t: 0, colour: '#7fd8ff' };
-      this.audio.play('hmm');
     } else if (name === 'fishIn') {
       this.fishIn();
-    } else if (name === 'twirl' && this.swiftee) {
-      if (!this.fx.reduced) this.swiftee.twirl();
-      this.fx.sparkle(this.swiftee.x, this.swiftee.y - 40, 8);
-      this.audio.play('boing');
     }
-  }
-
-  // The challenge fish (and the scenery fish) fade in with a shimmer of bubbles and sparkles.
-  fishIn() {
-    if (state.fish.length) return;
-    this.spawnChallengeFish();
-    this.fishFade = 0;
-    for (const f of state.fish) f.alpha = 0;
-    for (const f of this.ambient) f.fade = 0;
-    for (const f of state.fish) {
-      this.fx.puff(f.x, f.y, 0, 4, true);
-      this.fx.sparkle(f.x, f.y - f.h * 0.4, 6);
-    }
-    this.audio.play('cheer');
   }
 
   updateStoryFx(dt) {
-    if (this.fishFade < 1) {
-      this.fishFade = Math.min(1, this.fishFade + dt / 0.6);
-      for (const f of state.fish) f.alpha = this.fishFade;
-      for (const f of this.ambient) f.fade = this.fishFade;
-    }
-    if (this.hop) {
-      // a happy hop: up out of the water, then a splash down
-      this.hop.t += dt;
-      const k = this.hop.t / 0.5;
-      if (k < 1) {
-        this.popo.dip = -18 * Math.sin(Math.PI * k);
-      } else {
-        this.popo.dip = 0;
-        this.hop = null;
-        const p = this.popo.placement('fishing', 'idle');
-        this.fx.splash((p.raftLeftX + p.raftRightX) / 2, this.waterline, false);
-        this.fx.ripple(p.raftRightX, this.waterline + 4, 0.8);
-        this.audio.play('splashSmall');
-      }
-    }
-    if (this.mark) {
-      this.mark.t += dt;
-      if (this.mark.t > 1.9) this.mark = null;
+    if (!this.hop) return;
+    // a happy hop: up out of the water, then a splash down
+    this.hop.t += dt;
+    const k = this.hop.t / 0.5;
+    if (k < 1) {
+      this.popo.dip = -18 * Math.sin(Math.PI * k);
+    } else {
+      this.popo.dip = 0;
+      this.hop = null;
+      const raft = this.popo.raftEnds();
+      this.fx.splash((raft.left + raft.right) / 2, this.waterline, false);
+      this.fx.ripple(raft.right, this.waterline + 4, 0.8);
+      this.audio.play('splashSmall');
     }
   }
 
-  // A big comic "!" or "?" that pops above Popo's head and wobbles.
   // A cartoon cloud: soft white puffs burst outward and fade, hiding a quick costume change.
   drawPoof(ctx) {
     const p = this.poof;
@@ -788,38 +719,14 @@ class Game {
     ctx.restore();
   }
 
-  drawMark(ctx) {
-    const m = this.mark;
-    if (!m) return;
-    const head = this.popo.headTop();
-    const grow = m.t < 0.25 ? 1 + 2.2 * (m.t / 0.25 - 1) ** 3 + 1.2 * (m.t / 0.25 - 1) ** 2 : 1;
-    const alpha = m.t > 1.6 ? Math.max(0, 1 - (m.t - 1.6) / 0.3) : 1;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    // pops up from just above Popo's head
-    ctx.translate(head.x, head.y - 14 - Math.min(1, m.t / 0.25) * 12);
-    ctx.rotate(Math.sin(m.t * 12) * 0.16 * Math.exp(-m.t * 2.5));
-    ctx.scale(grow, grow);
-    ctx.font = '900 86px "Arial Rounded MT Bold", "Nunito", system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = 10;
-    ctx.strokeStyle = '#2b1600';
-    ctx.strokeText(m.char, 0, 0);
-    ctx.fillStyle = m.colour;
-    ctx.fillText(m.char, 0, 0);
-    ctx.restore();
-  }
-
   // The raft sits on the animated surface: it rises, falls and tilts with the waves under its
   // two ends, and sends out a small ripple now and then.
   rideWaves(dt) {
     const popo = this.popo;
-    const p = popo.placement('fishing', 'idle');
+    const ends = popo.raftEnds();
     const shift = popo.travelShift + popo.lean;
-    const left = p.raftLeftX + shift;
-    const right = p.raftRightX + shift;
+    const left = ends.left + shift;
+    const right = ends.right + shift;
     if (this.water.ok) {
       const amp = this.fx.reduced ? 0.35 : 1;
       const t = this.fx.t;
@@ -833,7 +740,7 @@ class Game {
       popo.waveAngle = 0;
     }
     this.raftRippleIn -= dt;
-    if (this.raftRippleIn <= 0 && state.phase !== PHASE.INTRO && !popo.mishap) {
+    if (this.raftRippleIn <= 0 && state.phase !== PHASE.TITLE) {
       this.raftRippleIn = 1.4 + Math.random() * 1.4;
       this.fx.ripple(Math.random() < 0.5 ? left + 8 : right - 8, this.waterline + 4, 0.55);
     }
@@ -851,7 +758,7 @@ class Game {
       c.width = 400;
       c.height = 16;
       const cx = c.getContext('2d');
-      cx.drawImage(img, 500, this.waterline + 8, 800, 32, 0, 0, 400, 16);
+      cx.drawImage(img, 500, this.waterline - SCENE_SHIFT + 8, 800, 32, 0, 0, 400, 16);
       const d = cx.getImageData(0, 0, 400, 16).data;
       const sum = [0, 0, 0];
       for (let i = 0; i < d.length; i += 4) { sum[0] += d[i]; sum[1] += d[i + 1]; sum[2] += d[i + 2]; }
@@ -867,10 +774,10 @@ class Game {
     const colour = this.surfaceColor();
     if (!colour) return;
     const popo = this.popo;
-    const p = popo.placement('fishing', 'idle');
+    const ends = popo.raftEnds();
     const shift = popo.travelShift + popo.lean;
-    const x0 = Math.floor(p.raftLeftX + shift - 34);
-    const x1 = Math.ceil(p.raftRightX + shift + 34);
+    const x0 = Math.floor(ends.left + shift - 34);
+    const x1 = Math.ceil(ends.right + shift + 34);
     const top = Math.floor(this.waterline - 16);
     const w = x1 - x0;
     const h = 60;
@@ -907,12 +814,12 @@ class Game {
     g.lineWidth = 2.2;
     g.stroke();
     g.globalCompositeOperation = 'destination-in';
-    const ends = g.createLinearGradient(0, 0, w, 0);
-    ends.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    ends.addColorStop(0.13, 'rgba(0, 0, 0, 1)');
-    ends.addColorStop(0.87, 'rgba(0, 0, 0, 1)');
-    ends.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    g.fillStyle = ends;
+    const fade = g.createLinearGradient(0, 0, w, 0);
+    fade.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    fade.addColorStop(0.13, 'rgba(0, 0, 0, 1)');
+    fade.addColorStop(0.87, 'rgba(0, 0, 0, 1)');
+    fade.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    g.fillStyle = fade;
     g.fillRect(0, 0, w, h);
     g.globalCompositeOperation = 'source-over';
     ctx.drawImage(c, x0, top);
@@ -966,33 +873,49 @@ class Game {
       const s = TITLE.splash;
       this.titleFx.splash(s.left + Math.random() * (s.right - s.left), s.y, false);
     }
-    if (state.phase !== PHASE.INTRO) this.titleFade = Math.max(0, this.titleFade - dt / 0.7);
+    if (state.phase !== PHASE.TITLE) this.titleFade = Math.max(0, this.titleFade - dt / 0.7);
   }
 
   update(dt) {
-    if (state.phase === PHASE.INTRO || this.titleFade > 0) this.updateTitle(dt);
+    if (state.phase === PHASE.TITLE || this.titleFade > 0) this.updateTitle(dt);
     clock.update(dt);
     this.popo.update(dt);
     this.fx.update(dt);
     this.popo.waterResponse = this.fx.raftResponse(this.popo.anchor.x);
     this.rideWaves(dt);
-    if (this.swiftee) this.swiftee.update(dt);
     if (this.poof && (this.poof.t += dt) > 0.6) this.poof = null;
-    if (this.awaitingNext && this.swiftee) {
-      this.nextNudge = (this.nextNudge || 3) - dt;
-      if (this.nextNudge <= 0) {
-        this.nextNudge = 3.4;
-        this.swiftee.hop();
-        this.audio.play('chirp');
-      }
-    }
     this.updateDialogue(dt);
     this.updateStoryFx(dt);
     this.watchFrameRate(dt);
+
+    // the net hangs from the boom, so it rides the waves with the raft; Popo leans into the
+    // lever while the winch runs
+    const { popo, winch, net } = this;
+    net.origin = popo.transformPoint(winch.hang.x, winch.hang.y);
+    net.drop = winch.ropeOut;
+    net.ropePhase = winch.ropeOut;
+    // Popo leans into the crank while the winch runs and pumps its arm up and down with it
+    const k = Math.min(1, dt * 8);
+    popo.shift.x += (winch.working * 5 - popo.shift.x) * k;
+    popo.shift.y += (winch.pump() - popo.shift.y) * k;
+    // hanging on its sling, the net sways a touch while it waits; it holds still for a drag
+    const idle = state.phase === PHASE.PUZZLE_READY || state.phase === PHASE.SHAPE_CORRECT || state.phase === PHASE.DROP_READY;
+    if (idle && !this.fx.reduced) net.swing = Math.sin(this.fx.t * 0.9) * 0.008;
+    else if (state.phase === PHASE.DRAGGING) net.swing *= Math.max(0, 1 - dt * 6);
+    net.update(dt);
+
     for (const f of state.fish) {
-      f.update(dt, this.area, state.fish);
       if (f.gone) continue;
-      if (f.breath <= 0 && !f.frozen && !f.escaping) {
+      if (f.caught) {
+        // netted fish hang in the mesh, swaying a touch with the net
+        const p = net.toStage(f.caught);
+        f.x = p.x + Math.sin(this.fx.t * 5 + f.caught.x) * 1.5;
+        f.y = p.y;
+        continue;
+      }
+      f.update(dt, this.fishArea, state.fish);
+      if (f.offstage) continue;
+      if (f.breath <= 0 && !f.frozen) {
         f.breath = 1.6 + Math.random() * 2.6;
         f.puffs += 1 + Math.floor(Math.random() * 3);
       }
@@ -1006,15 +929,8 @@ class Game {
     }
     if (this.ambient.some((f) => f.gone)) this.ambient = this.ambient.filter((f) => !f.gone);
     for (const f of this.ambient) f.update(dt, this.area);
-    if (this.popo.line.mode === 'attached' && state.selectedFish) {
-      const m = mouthOf(state.selectedFish);
-      this.popo.line.hook.x = m.x;
-      this.popo.line.hook.y = m.y;
-    }
-    this.keepTargetsInView();
-    if (this.handFish && !this.handFish.gone) this.ui.moveHand(this.handFish.x + 10, this.handFish.y + this.handFish.h * 0.3);
+    if (state.phase === PHASE.PUZZLE_READY || state.phase === PHASE.DRAGGING) this.placeHandle();
     this.updateHint(dt);
-    this.updateInstruction(dt);
   }
 
   // The painting goes through the per-pixel water pass (src/water.js); without WebGL it is
@@ -1028,7 +944,7 @@ class Game {
     if (this.water.ok) {
       this.syncWaterCanvas();
       const drawn = this.water.render({
-        from: current, to: next, mix: k, time: this.fx.t, waterline: this.waterline,
+        from: current, to: next, mix: k, time: this.fx.t, waterline: this.waterline, shift: SCENE_SHIFT,
         plants: this.fx.plantsFor(index), amplitude: this.fx.reduced ? 0.35 : 1,
       });
       if (drawn) {
@@ -1041,11 +957,19 @@ class Game {
     return 0;
   }
 
-  // Fallback for browsers without WebGL: the painting drawn plainly; during a row the two
-  // paintings slide with depth parallax and a feathered seam.
+  // Fallback for browsers without WebGL: the painting drawn plainly below a band of sky;
+  // during a row the two paintings slide with depth parallax and a feathered seam.
   drawPaintingPlain(ctx, current, next, k) {
+    const sky = ctx.createLinearGradient(0, 0, 0, SCENE_SHIFT);
+    sky.addColorStop(0, '#1e78d8');
+    sky.addColorStop(1, '#3a95ea');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, STAGE_W, SCENE_SHIFT + 1);
+    ctx.save();
+    ctx.translate(0, SCENE_SHIFT);
     if (next) this.drawParallaxPlain(ctx, current, next, k);
     else ctx.drawImage(current, 0, 0, STAGE_W, STAGE_H);
+    ctx.restore();
   }
 
   featheredCopy(img) {
@@ -1077,10 +1001,10 @@ class Game {
     ctx.scale(-1, 1);
     ctx.drawImage(current, 0, 0, STAGE_W, STAGE_H);
     ctx.restore();
-    const ease = (a, b, x) => { const v = Math.min(1, Math.max(0, (x - a) / (b - a))); return v * v * (3 - 2 * v); };
-    ctx.globalAlpha = ease(0, 0.07, k);
+    const smooth = (a, b, x) => { const v = Math.min(1, Math.max(0, (x - a) / (b - a))); return v * v * (3 - 2 * v); };
+    ctx.globalAlpha = smooth(0, 0.07, k);
     ctx.drawImage(this.featheredCopy(next), ox + pan, 0, STAGE_W, STAGE_H);
-    ctx.globalAlpha = ease(0.93, 1, k);
+    ctx.globalAlpha = smooth(0.93, 1, k);
     if (ctx.globalAlpha > 0) ctx.drawImage(next, 0, 0, STAGE_W, STAGE_H);
     ctx.globalAlpha = 1;
   }
@@ -1195,35 +1119,43 @@ class Game {
   draw() {
     const ctx = this.stage.begin();
     ctx.clearRect(0, 0, STAGE_W, STAGE_H);
-    if (state.phase === PHASE.INTRO) {
+    if (state.phase === PHASE.TITLE) {
       this.drawTitle(ctx, 1);
       return;
     }
     const offset = this.drawBackground(ctx);
     this.fx.drawWater(ctx, offset, state.fish);
     for (const f of this.ambient) f.draw(ctx);
-    // a hooked fish goes between the hook and the line: the line runs over it to its lips and
-    // the hook sits inside its mouth
-    const hooked = this.popo.line.mode === 'attached' ? state.selectedFish : null;
-    for (const f of state.fish) if (f !== hooked) f.draw(ctx);
-    if (this.leaper) this.leaper.draw(ctx);
+    for (const f of state.fish) f.draw(ctx);
     for (const f of this.leapers) f.draw(ctx);
     this.fx.drawSplashLayer(ctx, false);
-    if (hooked) {
-      this.popo.drawLine(ctx, 'hook');
-      hooked.draw(ctx);
-      this.popo.drawLine(ctx, 'line');
+    // the net hangs over the fish; its lifting rope comes down from the boom's end pulley
+    const { popo, winch } = this;
+    this.net.draw(ctx, { waterline: this.waterline, pulley: popo.transformPoint(winch.exit.x, winch.exit.y) });
+    // Popo, his raft and the winch beside him ride the waves as one; the crank arm goes
+    // behind him into his paws, the machine stands in front of his feet
+    const onRaft = (drawPart) => {
+      ctx.save();
+      popo.applyTransform(ctx);
+      ctx.translate(popo.anchor.x, popo.anchor.y);
+      drawPart();
+      ctx.restore();
+    };
+    if (popo.rowing) {
+      popo.draw(ctx);
     } else {
-      this.popo.drawLine(ctx);
+      ctx.save();
+      popo.applyTransform(ctx);
+      popo.drawRaftProp(ctx);
+      ctx.restore();
+      onRaft(() => winch.drawArm(ctx, popo.grip()));
+      popo.draw(ctx);
     }
-    this.popo.draw(ctx);
-    this.drawMark(ctx);
+    onRaft(() => winch.draw(ctx));
     this.drawRaftWater(ctx);
-    if (this.swiftee) this.swiftee.draw(ctx);
     this.drawPoof(ctx);
     this.fx.drawFront(ctx);
     if (this.titleFade > 0) this.drawTitle(ctx, this.titleFade);
-    this.ui.syncHits(state.fish);
   }
 }
 

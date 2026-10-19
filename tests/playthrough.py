@@ -1,30 +1,30 @@
-"""End-to-end playthrough in headless Chromium: python3 tests/playthrough.py [correct|wrong|both].
+"""End-to-end playthrough in headless Chromium: python3 tests/playthrough.py
 
-Plays the whole journey through the real taps (every level is "catch them all"), checks that
-fish swim out of view and come back, that the tutorial hand and the idle hint only pick fish in
-view, that pause freezes the game, that Next is ignored while paused, and that Next ends the
-journey back on the title. Fails on any console error.
+Plays all six nets with real pointer drags and Drop Net clicks. Checks that a corner let go
+away from its place leaves the puzzle open, that one dragged close snaps to an exact
+parallelogram (also when the window is resized mid-drag), that Drop Net only arms once the
+shape is right, that every fish of every level is netted, that levels and waters advance,
+that pause freezes the game, that the final screen appears and tells the hosting page, and
+that Play Again starts over. Fails on any console error.
 """
-import sys
 import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 URL = (ROOT / 'index.html').as_uri() + '?debug'
-TOTAL = 13  # 3 triangles + 3 pentagons + 3 hexagons + 4 quadrilaterals
 
-STATE = '''() => { const d = window.popoDebug, s = d.state, g = d.game;
-  return { phase: s.phase, loc: s.locationIndex, caught: s.collected.length, paused: s.paused,
-           next: !document.getElementById('btn-next').hidden, start: !document.getElementById('screen-start').hidden,
-           hand: !document.getElementById('hand').hidden, handFish: g.handFish ? !g.handFish.offstage : null }; }'''
+STATE = '''() => { const s = window.popoDebug.state, g = window.popoDebug.game;
+  return { phase: s.phase, level: s.level, loc: s.locationIndex, caught: s.caught, paused: s.paused, misses: s.misses,
+           dropHidden: document.getElementById('btn-drop').hidden, dropDisabled: document.getElementById('btn-drop').disabled,
+           complete: !document.getElementById('overlay-complete').hidden, start: !document.getElementById('screen-start').hidden,
+           parallelogram: PopoGame.isParallelogram(g.net.points), locked: g.net.locked, fish: s.fish.length }; }'''
 
-# the client point of a fish to tap: an in-view target (right) or distractor (wrong), well inside the stage
-PICK = '''(right) => { const d = window.popoDebug, s = d.state, g = d.game, k = g.stage.scale;
+# the corner and its place, as client points
+POINTS = '''() => { const g = window.popoDebug.game, n = g.net, k = g.stage.scale;
   const c = document.getElementById('stage').getBoundingClientRect();
-  const f = s.fish.find(f => !f.gone && !f.offstage && !f.escaping && f.x > 120 && f.x < 1550
-                       && PopoGame.matchesTarget(f.key, s.target) === right);
-  return f ? [f.x * k + c.left, f.y * k + c.top] : null; }'''
+  const h = n.handle(), t = n.toStage(n.target);
+  return { handle: [h.x * k + c.left, h.y * k + c.top], target: [t.x * k + c.left, t.y * k + c.top], scale: k, rect: [c.left, c.top] }; }'''
 
 
 def check(ok, what, detail=''):
@@ -37,30 +37,37 @@ def state(page):
     return page.evaluate(STATE)
 
 
-def wait_for(page, cond, timeout=60, soft=False):
+def wait_for(page, cond, timeout=60, what='condition'):
     end = time.time() + timeout
     while time.time() < end:
         st = state(page)
         if cond(st):
             return st
         page.wait_for_timeout(100)
-    if soft:
-        return None
-    raise SystemExit(f'FAIL timed out waiting; last state {state(page)}')
+    raise SystemExit(f'FAIL timed out waiting for {what}; last state {state(page)}')
 
 
-def tap_fish(page, right, timeout=30):
-    end = time.time() + timeout
-    while time.time() < end:
-        point = page.evaluate(PICK, right)
-        if point:
-            page.mouse.click(*point)
-            return True
-        page.wait_for_timeout(100)
-    return False
+# Drags the corner from where it is to a client point, in small steps like a finger would.
+def drag(page, to, steps=24, resize_at=None):
+    pts = page.evaluate(POINTS)
+    x0, y0 = pts['handle']
+    page.mouse.move(x0, y0)
+    page.mouse.down()
+    for i in range(1, steps + 1):
+        if resize_at is not None and i == resize_at:
+            page.set_viewport_size(resize_at and {'width': 1100, 'height': 650})
+            page.wait_for_timeout(150)
+            # the target moved with the stage; aim at where it is now
+            now = page.evaluate(POINTS)
+            to = now['target']
+            x0, y0 = now['handle']
+        t = i / steps
+        page.mouse.move(x0 + (to[0] - x0) * t, y0 + (to[1] - y0) * t)
+        page.wait_for_timeout(16)
+    page.mouse.up()
 
 
-def play(mode):
+def play():
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={'width': 1280, 'height': 720})
@@ -69,63 +76,58 @@ def play(mode):
         page.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
         page.goto(URL)
         page.wait_for_function('() => !document.getElementById("btn-play").disabled', timeout=30000)
+        page.evaluate('() => { window.completed = null; window.addEventListener("popo:complete", (e) => { window.completed = e.detail; }); }')
         page.click('#btn-play', force=True)
-        st = wait_for(page, lambda s: s['phase'] == 'ready')
-        check(st['hand'] and st['handFish'], f'{mode}: tutorial hand points at a fish in view')
+        st = wait_for(page, lambda s: s['phase'] == 'puzzleReady', 60, 'the first net')
+        check(st['level'] == 0 and st['fish'] == 3 and not st['dropHidden'] and st['dropDisabled'],
+              'the first net is ready with its school and Drop Net disabled')
 
-        # fish swim out of view and come back
-        seen = page.evaluate('''async () => { const s = window.popoDebug.state; const out = new Set(), back = new Set();
-          for (let i = 0; i < 160; i++) { for (const f of s.fish) { if (f.offstage) out.add(f); else if (out.has(f)) back.add(f); }
-            await new Promise(r => setTimeout(r, 100)); }
-          return [out.size, back.size]; }''')
-        check(seen[0] > 0 and seen[1] > 0, f'{mode}: fish swim out of view and come back', f'{seen[0]} left, {seen[1]} returned')
+        levels = page.evaluate('() => PopoGame.LEVELS.map((l) => ({ fish: l.fish, location: l.location }))')
+        for i, level in enumerate(levels):
+            st = wait_for(page, lambda s, i=i: s['phase'] == 'puzzleReady' and s['level'] == i, 30, f'level {i + 1}')
+            check(st['loc'] == level['location'] and st['fish'] == level['fish'], f'level {i + 1}: in its waters with {level["fish"]} fish')
+            check(not st['parallelogram'], f'level {i + 1}: starts off as a wrong shape')
 
-        # pause freezes the game clock
-        page.evaluate('() => window.popoDebug.game.togglePause()')
-        before = page.evaluate('() => PopoGame.clock.time')
-        page.wait_for_timeout(600)
-        check(page.evaluate('() => PopoGame.clock.time') == before, f'{mode}: pause freezes the game')
-        page.evaluate('() => window.popoDebug.game.togglePause()')
+            if i == 0:
+                # letting go far from the right place is not a snap
+                pts = page.evaluate(POINTS)
+                drag(page, [pts['handle'][0] - 60, pts['handle'][1] + 70])
+                page.wait_for_timeout(300)
+                st = state(page)
+                check(st['phase'] == 'puzzleReady' and st['misses'] == 1 and not st['locked'], 'a corner let go off its place stays loose')
 
-        level_wrong = set()
-        while True:
-            st = wait_for(page, lambda s: s['phase'] in ('ready', 'levelTransition') or s['next'], 90)
-            if st['next'] or st['phase'] == 'levelTransition' and st['caught'] >= TOTAL:
-                break
-            if st['phase'] != 'ready':
-                page.wait_for_timeout(200)  # rowing to the next level
-                continue
+            drag(page, page.evaluate(POINTS)['target'], resize_at=12 if i == 1 else None)
+            st = wait_for(page, lambda s: s['phase'] in ('shapeCorrect', 'dropReady'), 5, 'the snap')
+            check(st['parallelogram'] and st['locked'], f'level {i + 1}: the corner snapped to an exact parallelogram')
+            if i == 1:
+                page.set_viewport_size({'width': 1280, 'height': 720})
+                check(True, 'level 2: snapped after a resize in the middle of the drag')
+
+            if i == 0:
+                page.evaluate('() => window.popoDebug.game.togglePause()')
+                before = page.evaluate('() => PopoGame.clock.time')
+                page.wait_for_timeout(500)
+                check(page.evaluate('() => PopoGame.clock.time') == before and state(page)['paused'], 'pause freezes the game')
+                page.evaluate('() => window.popoDebug.game.togglePause()')
+
+            st = wait_for(page, lambda s: s['phase'] == 'dropReady', 15, 'Drop Net to arm')
+            check(not st['dropDisabled'], f'level {i + 1}: Drop Net is armed once the shape is right')
             caught = st['caught']
-            if mode == 'wrong' and st['loc'] not in level_wrong:
-                check(tap_fish(page, False), f'{mode}: found a wrong fish in level {st["loc"] + 1}')
-                if wait_for(page, lambda s: s['phase'] != 'ready', 3, soft=True):  # else the tap missed a moving fish
-                    level_wrong.add(st['loc'])
-                    wait_for(page, lambda s: s['phase'] == 'ready', 30)
-                continue
-            if not tap_fish(page, True):
-                raise SystemExit(f'FAIL {mode}: no fish to catch in view; {state(page)}')
-            if wait_for(page, lambda s: s['phase'] != 'ready', 3, soft=True):
-                wait_for(page, lambda s: s['caught'] > caught, 30)
-        check(state(page)['caught'] == TOTAL, f'{mode}: all {TOTAL} fish caught across the four levels', str(state(page)['caught']))
-        if mode == 'wrong':
-            check(len(level_wrong) == 4, f'{mode}: a wrong fish was tapped (and recovered from) in every level')
+            page.click('#btn-drop')
+            st = wait_for(page, lambda s: s['phase'] == 'netLowering', 3, 'the net to lower')
+            check(st['dropHidden'], f'level {i + 1}: Drop Net goes away while the net is down')
+            st = wait_for(page, lambda s: s['phase'] == 'levelSuccess', 12, 'the catch')
+            check(st['caught'] == caught + level['fish'], f'level {i + 1}: every fish was netted', f'{st["caught"] - caught} of {level["fish"]}')
 
-        st = wait_for(page, lambda s: s['next'], 60)
-        page.evaluate('() => window.popoDebug.game.togglePause()')
-        page.evaluate('() => window.popoDebug.game.next()')
-        check(state(page)['next'] and state(page)['phase'] != 'intro', f'{mode}: Next is ignored while paused')
-        page.evaluate('() => window.popoDebug.game.togglePause()')
-        page.click('#btn-next')
-        st = wait_for(page, lambda s: s['phase'] == 'intro' and s['start'], 10)
-        check(not st['next'], f'{mode}: Next ends the journey on the title, ready to play again')
-        page.click('#btn-play', force=True)
-        wait_for(page, lambda s: s['phase'] == 'ready', 60)
-        check(state(page)['caught'] == 0, f'{mode}: playing again starts fresh')
-        check(not errors, f'{mode}: no console errors', '; '.join(errors[:3]))
+        st = wait_for(page, lambda s: s['complete'], 20, 'the final screen')
+        check(st['phase'] == 'gameComplete' and page.evaluate('() => window.completed && window.completed.levels') == 6,
+              'the final screen appears and the page is told')
+        page.click('#btn-again')
+        st = wait_for(page, lambda s: s['phase'] == 'puzzleReady', 20, 'Play Again')
+        check(st['level'] == 0 and st['caught'] == 0 and not st['complete'], 'Play Again starts the nets over')
+        check(not errors, 'no console errors', '; '.join(errors[:3]))
         browser.close()
 
 
 if __name__ == '__main__':
-    mode = sys.argv[1] if len(sys.argv) > 1 else 'both'
-    for m in (['correct', 'wrong'] if mode == 'both' else [mode]):
-        play(m)
+    play()

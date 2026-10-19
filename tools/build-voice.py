@@ -9,8 +9,8 @@ Each clip is keyed by its speaker and its on-screen text, so the dialogue in src
 src/game.js finds it. A line with no clip falls back to the synthesized voice blips, so editing
 a line's text never breaks the game; just run this again to re-record it.
 
-Voices: the narrator is a clear Indian English (en-IN) voice and Popo and Swiftee are character
-voices, found in Gemini's voice library (see CAST). The chosen voices are saved in
+Voices: the narrator is a clear Indian English (en-IN) voice and Popo is a character voice,
+found in Gemini's voice library (see CAST). The chosen voices are saved in
 asset/voice/cast.json, so every run sounds the same; a role whose voice changes is re-recorded.
 
 Without a Gemini key, --engine kokoro records the same lines locally with Kokoro-82M
@@ -72,12 +72,6 @@ CAST = {
                 'excit', 'fun', 'lively', 'upbeat', 'bubbly', 'expressive'],
         fallback='Fenrir',
         style='Goofy, bouncy and warm, with a big cheerful grin; comically expressive.'),
-    'swiftee': dict(
-        find=[{'language_code': ['en-IN'], 'pitch': ['high']}, {'pitch': ['high']}],
-        prefer=['playful', 'cartoon', 'character', 'animat', 'bright', 'youthful', 'excit', 'cheerful',
-                'lively', 'bubbly', 'energetic'],
-        fallback='Leda',
-        style='Quick, chirpy and squeaky with delight, like a tiny excited bird.'),
 }
 # The same roles for the local Kokoro engine: voice, speaking speed, and a pitch factor applied
 # afterwards (below 1 is deeper and bigger, above 1 higher and smaller). British-English
@@ -87,28 +81,28 @@ KOKORO = {
                      audition=['hf_alpha', 'hf_beta', 'bf_emma']),
     'popo': dict(voice='hm_psi', lang='b', speed=1.12, pitch=0.9,
                  audition=['hm_psi', 'hm_omega', 'am_puck', 'am_fenrir']),
-    'swiftee': dict(voice='hf_beta', lang='b', speed=1.12, pitch=1.3,
-                    audition=['hf_beta', 'hf_alpha', 'af_heart']),
 }
-AUDITION_LINE = {'narrator': 'Popo *loves* fishing.', 'popo': 'Whoopsie Doopsie!', 'swiftee': "Let's find *out!*"}
+AUDITION_LINE = {'narrator': 'Popo *loves* fishing.', 'popo': '*Great* catch!'}
 
 INSTRUCTION = 'Clear and encouraging, a little slower so a young child can follow.'
+PRAISE = 'Warm and pleased.'
 
 # (speaker, text exactly as shown in the game with *stressed* words, extra delivery note)
 LINES = [
     ('narrator', 'Popo *loves* fishing.', ''),
     ('narrator', 'And today…', 'Teasing, building suspense.'),
     ('narrator', 'he wants to catch *all* kinds of fish!', 'Big and excited.'),
-    ('narrator', 'Catch all the *triangle* fish!', INSTRUCTION),
-    ('narrator', 'Catch all the *pentagon* fish!', INSTRUCTION),
-    ('narrator', 'Catch all the *hexagon* fish!', INSTRUCTION),
-    ('narrator', 'Catch all the *quadrilateral* fish!', INSTRUCTION),
-    ('popo', 'Whoopsie Doopsie!', 'Wobbly and embarrassed, then a giggle.'),
+    ('narrator', 'Drag the glowing corner to make a *parallelogram*.', INSTRUCTION),
+    ('narrator', 'Make a *parallelogram*!', INSTRUCTION),
+    ('narrator', 'Great! *Opposite sides* are parallel!', PRAISE),
+    ('narrator', 'A parallelogram has *two pairs* of parallel sides!', PRAISE),
+    ('narrator', 'Nice! You made a *parallelogram*!', PRAISE),
+    ('narrator', 'Parallelograms can look *different*!', PRAISE),
+    ('narrator', 'Drop the *net*!', 'Bright and inviting.'),
+    ('narrator', 'You made *parallelograms*!', 'Big and proud.'),
+    ('narrator', 'Both pairs of opposite sides are *parallel*.', 'Gentle: the lesson in one line.'),
     ('popo', '*Great* catch!', 'Delighted and proud.'),
-    ('popo', '*Woah!*', 'An amazed gasp.'),
-    ('popo', "I haven't seen *that* one before!", 'Astonished.'),
-    ('popo', 'What *kind* of fish was that?', 'Puzzled and curious.'),
-    ('swiftee', "Let's find *out!*", 'Eager, swooping in.'),
+    ('popo', 'We caught them *all*!', 'Overjoyed.'),
 ]
 
 

@@ -1,53 +1,47 @@
 (function (PopoGame) {
 'use strict';
 
+// One phase at a time decides what input is allowed; nothing else does.
 const PHASE = {
+  TITLE: 'title',
   INTRO: 'intro',
-  TUTORIAL: 'tutorial',
-  READY: 'ready',
-  CASTING: 'casting',
-  REELING: 'reeling',
-  CELEBRATING: 'celebrating',
-  WRONG_PULL: 'wrongPull',
-  LOSING_BALANCE: 'losingBalance',
-  FALLING: 'falling',
-  SUBMERGED: 'submerged',
-  RESURFACING: 'resurfacing',
-  RECOVERING: 'recovering',
-  LEVEL_TRANSITION: 'levelTransition',
-  COMPLETE: 'complete',
+  PUZZLE_READY: 'puzzleReady',
+  DRAGGING: 'dragging',
+  SNAPPING: 'snapping',
+  SHAPE_CORRECT: 'shapeCorrect',
+  DROP_READY: 'dropReady',
+  NET_LOWERING: 'netLowering',
+  CATCHING: 'catching',
+  NET_RAISING: 'netRaising',
+  LEVEL_SUCCESS: 'levelSuccess',
+  TRANSITIONING: 'transitioning',
+  GAME_COMPLETE: 'gameComplete',
 };
 
 const state = {
-  phase: PHASE.INTRO,
+  phase: PHASE.TITLE,
   paused: false,
+  level: 0,
   locationIndex: 0,
-  challengeIndex: 0,
-  target: null,
   fish: [],
-  selectedFish: null,
-  collected: [],
-  discovered: new Set(),
+  caught: 0,   // netted so far
+  banked: 0,   // of those, already in the bucket (the HUD's tally)
   muted: false,
   token: 0,
   idleTime: 0,
-  hintShown: false,
-  streak: 0, // right catches in a row, with no wrong tap between
+  misses: 0, // corners let go away from their place this level; hints come sooner after a few
 };
 
 function resetProgress() {
-  state.phase = PHASE.INTRO;
+  state.phase = PHASE.TITLE;
   state.paused = false;
+  state.level = 0;
   state.locationIndex = 0;
-  state.challengeIndex = 0;
-  state.target = null;
   state.fish = [];
-  state.selectedFish = null;
-  state.collected = [];
-  state.discovered = new Set();
+  state.caught = 0;
+  state.banked = 0;
   state.idleTime = 0;
-  state.hintShown = false;
-  state.streak = 0;
+  state.misses = 0;
 }
 
 // Every sequence captures a token; bumping it cancels anything still waiting.
