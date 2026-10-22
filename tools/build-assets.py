@@ -4,12 +4,15 @@
 Backgrounds are re-encoded as WebP with a water mask each; the raft is fitted into the cell
 the game registers to; the title's shape fish and the natural fish of the levels are sliced
 from their sheets into atlases measured into src/sprite-data.js. The generated character,
-winch, net and panel art in assets/generated/ is used as it is (see
-tools/generated-art-prompts.txt).
+winch, net and panel art in assets/generated/ is used whole, as it is (see
+tools/generated-art-prompts.txt); the game loads WebP copies of it from assets/generated-web/,
+the same pictures at the same size in about a fifth of the bytes. `--generated` rebuilds only
+those copies (run it whenever a file in assets/generated/ changes; tests/assets.py checks).
 
 Requires Pillow (pip install Pillow).
 """
 import base64
+import hashlib
 import json
 import math
 import os
@@ -222,7 +225,33 @@ def build_props():
     cell.save(os.path.join(OUT, 'sprites', 'popo-props.webp'), lossless=True)
 
 
+# The generated art the game draws on the canvas (the panel is the CSS cards' background and is
+# loaded as it is).
+GENERATED = ['popo-operating', 'winch-arched', 'rope', 'rope-connector', 'net']
+
+
+def build_generated():
+    """WebP copies of the generated art, same pixels in size, and the fingerprint of each source."""
+    out = os.path.join(OUT, 'generated-web')
+    os.makedirs(out, exist_ok=True)
+    sources = {}
+    for name in GENERATED:
+        path = os.path.join(OUT, 'generated', f'{name}.png')
+        with open(path, 'rb') as fh:
+            sources[name] = hashlib.sha1(fh.read()).hexdigest()
+        im = Image.open(path).convert('RGBA')
+        im.save(os.path.join(out, f'{name}.webp'), 'WEBP', quality=92, alpha_quality=100, method=6)
+        print('generated', name, im.size, os.path.getsize(os.path.join(out, f'{name}.webp')) // 1024, 'KB')
+    with open(os.path.join(out, 'sources.json'), 'w') as fh:
+        json.dump(sources, fh, indent=1, sort_keys=True)
+        fh.write('\n')
+
+
 def main():
+    if '--generated' in sys.argv[1:]:
+        build_generated()
+        return
+    build_generated()
     os.makedirs(os.path.join(OUT, 'backgrounds'), exist_ok=True)
     os.makedirs(os.path.join(OUT, 'sprites'), exist_ok=True)
     for i, name in enumerate(BACKGROUNDS, start=1):

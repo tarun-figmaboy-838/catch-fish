@@ -36,6 +36,21 @@ positions, animation logic, tests). This file is how they coordinate; the user r
 | `panel.png` | pause and final cards | scaled whole, content padded 13 % / 9 % |
 | `popo.png`, `winch.png` | superseded | kept for reference |
 
+## Changes on 22 Oct 2026 (Claude)
+
+- **The game loads WebP copies of the generated art** from `assets/generated-web/` (same
+  pictures, same pixel size, about a fifth of the download). Your PNGs in `assets/generated/`
+  stay the source: after replacing one, run `python3 tools/build-assets.py --generated` (or
+  ask Claude). `python3 tests/assets.py` fails if a copy is stale. `panel.png` is still used
+  as it is by the cards' CSS.
+- **A small block at the end of `src/styles.css`** ("text delivery") animates the instruction's
+  words as they're said, keeps the instruction on one line and draws ∠ (Fredoka has none). It
+  doesn't restyle the plate; please keep it.
+- **The net's bag** (`drawBagVolume`, the gathered-mouth `meshPoint`, the slack taken up before
+  the haul) was added by Codex in `src/net.js` and `src/sequences.js`. Claude reviewed it and
+  kept the shading and the haul; at the user's request the bag now hangs plumb from the ring
+  with its neck gathered up into the ring's bar (no drawn tie), shaped as a potli. Next time, describe changes to Claude's files here first, as above.
+
 ## Open asks for Codex, in order
 
 1. **Popo expressions**, same sheet layout as `popo-operating.png` (2 × 2 cells of 694 × 566,

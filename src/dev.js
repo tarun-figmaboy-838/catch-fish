@@ -49,7 +49,7 @@ const JUMPS = [
   ['Solve', () => {
     const g = game();
     if (state.phase !== PHASE.PUZZLE_READY) level(state.level);
-    g.net.setHandle(g.net.target);
+    g.net.toStop(0);
   }],
   ['Drop', () => game().onDrop()],
   ['Row on', () => {

@@ -15,55 +15,57 @@ const LOCATIONS = [
 // The corners are A top-left, B top-right, C bottom-right and D bottom-left, clockwise. Each
 // level's solved net is a parallelogram: `width`, `height` and `lean` (how far the top edge
 // sits to the right of the bottom edge), or `angleA` instead of a lean. `corner` is the one
-// the child moves and `start` where it begins, measured from its place; `along` keeps that
-// corner on the line of the side named, so dragging only changes what the level is about.
+// the child moves. It never stretches freely: it slides along a track through its place, the
+// line of the side or diagonal named in `along` (a diagonal runs toward the opposite corner),
+// clicking from stop to stop, and `start` is how many stops from its place it begins (negative
+// toward the first corner named). The track is chosen so dragging changes what the level is about.
 // `metres` gives a side's length in metres, which sets the scale of every measurement shown.
 // Each level teaches one property; `type` picks the check (see Net.check).
 const LEVELS = [
-  { title: 'Make it Parallel', type: 'parallel', sides: ['AB', 'CD'], corner: 'B',
-    width: 440, height: 200, lean: 50, start: { x: 22, y: -90 }, // slid along AD, so BC stays parallel to AD
+  { title: 'Make it Parallel', type: 'parallel', sides: ['AB', 'CD'], corner: 'B', along: 'AD',
+    width: 440, height: 200, lean: 50, start: 5, // slides along AD, so BC stays parallel to AD
     location: 0, fish: 3, hintDelay: 3.5,
     prompt: 'Make *AB* parallel to *CD*.',
     praise: 'Great! AB and CD are parallel.',
     hint: 'Look at AB and CD. Do they run in the same direction?' },
-  { title: 'Complete the Parallelogram', type: 'parallel', sides: ['BC', 'AD'], corner: 'C',
-    width: 440, height: 210, lean: -60, start: { x: 120, y: 0 }, // slid along DC, so CD stays parallel to AB
+  { title: 'Complete the Parallelogram', type: 'parallel', sides: ['BC', 'AD'], corner: 'C', along: 'DC',
+    width: 440, height: 210, lean: -60, start: 6, // slides along DC, so CD stays parallel to AB
     location: 0, fish: 4, hintDelay: 5,
     prompt: 'Make *BC* parallel to *AD*.',
     praise: 'Nice! Both pairs of opposite sides are parallel.',
     hint: 'Look at BC and AD. Do they lean the same way?' },
   { title: 'Match the Opposite Side', type: 'length', side: 'CD', reference: 'AB', metres: { AB: 6 }, corner: 'C', along: 'DC',
-    width: 420, height: 200, lean: 50, start: { x: -98, y: 0 }, // CD starts at 4.6 m
+    width: 420, height: 200, lean: 50, start: -5, // CD starts at 4.6 m
     location: 1, fish: 4, hintDelay: 5,
     prompt: 'AB = *6 m*. Make CD = *6 m*.',
     praise: 'Great! Opposite sides can be equal.',
     hint: 'Compare the two opposite side lengths.' },
-  { title: 'Use Both Side Properties', type: 'sides', metres: { AB: 8, AD: 5 }, corner: 'C',
-    width: 380, height: 230, lean: 60, start: { x: -85, y: -70 },
+  { title: 'Use Both Side Properties', type: 'sides', metres: { AB: 8, AD: 5 }, corner: 'C', along: 'AC',
+    width: 380, height: 230, lean: 60, start: -6, // slides along the diagonal, toward A
     location: 1, fish: 5, hintDelay: 6,
     prompt: 'AB = *8 m* and AD = *5 m*. Make the net a parallelogram.',
     praise: 'Perfect! Opposite sides are equal and parallel.',
     hint: 'CD should match AB, and BC should match AD.' },
   { title: 'Match the Opposite Angle', type: 'angle', vertex: 'C', reference: 'A', degrees: 70, corner: 'C', along: 'DC',
-    width: 420, height: 210, angleA: 70, start: { x: -110, y: 0 }, // angle C starts near 96 degrees
+    width: 420, height: 210, angleA: 70, start: -5, // angle C starts near 96 degrees
     location: 2, fish: 5, hintDelay: 6,
     prompt: '∠A = *70°*. Make ∠C = *70°*.',
     praise: 'Yes! Opposite angles are equal.',
     hint: 'Compare angle A with angle C.' },
   { title: 'Make the Adjacent Angle', type: 'supplementary', vertex: 'B', reference: 'A', degrees: 65, corner: 'B', along: 'AB',
-    width: 420, height: 210, angleA: 65, start: { x: 104, y: 0 }, // angle B starts near 88 degrees
+    width: 420, height: 210, angleA: 65, start: 5, // angle B starts near 89 degrees
     location: 2, fish: 6, hintDelay: 6,
     prompt: '∠A = *65°*. Make ∠B supplementary to ∠A.',
     praise: 'Great! Adjacent angles add to 180°.',
     hint: 'Adjacent angles should add to 180°.' },
-  { title: 'Balance the Diagonals', type: 'diagonals', metres: { AB: 6 }, corner: 'C',
-    width: 440, height: 210, lean: 50, start: { x: 80, y: -65 },
+  { title: 'Balance the Diagonals', type: 'diagonals', metres: { AB: 6 }, corner: 'C', along: 'AC',
+    width: 440, height: 210, lean: 50, start: -5, // along AC itself, so the diagonals always cross at BD's middle
     location: 3, fish: 7, hintDelay: 7,
     prompt: 'Make the diagonals *bisect* each other.',
     praise: 'Great! The diagonals bisect each other.',
     hint: 'Check both halves of each diagonal.' },
-  { title: 'Final Catch', type: 'parallelogram', metres: { AB: 6 }, corner: 'D',
-    width: 400, height: 210, lean: 30, rotate: -7, start: { x: 80, y: -70 },
+  { title: 'Final Catch', type: 'parallelogram', metres: { AB: 6 }, corner: 'D', along: 'BD',
+    width: 400, height: 210, lean: 30, rotate: -7, start: -5, // slides along the diagonal, toward B
     location: 3, fish: 9, rare: true, hintDelay: 9,
     prompt: 'Make this net a *parallelogram*.',
     praise: 'You made a parallelogram!',
@@ -82,10 +84,16 @@ function shuffle(list) {
   return result;
 }
 
-// A school of different fish for a level; no two levels in a row share the same mix.
+// A level's sea is busy: CROWD times its `fish` swim about (at most MOST_FISH), more than one
+// drop can net, so the child times Drop Net for when fish swim under it. Every kind appears
+// before any repeats, and no two levels in a row open with the same mix.
+const CROWD = 3;
+const MOST_FISH = 22;
+const schoolSize = (level) => Math.min(MOST_FISH, level.fish * CROWD);
 let lastSchool = [];
 function schoolFor(level) {
-  const school = shuffle(NATURAL_FISH).slice(0, level.fish);
+  const kinds = shuffle(NATURAL_FISH);
+  const school = Array.from({ length: schoolSize(level) }, (_, i) => kinds[i % kinds.length]);
   if (school.every((key) => lastSchool.includes(key))) {
     const fresh = NATURAL_FISH.find((key) => !lastSchool.includes(key));
     if (fresh) school[0] = fresh;
@@ -115,5 +123,5 @@ const STORY = {
   ],
 };
 
-Object.assign(PopoGame, { LOCATIONS, LEVELS, NATURAL_FISH, STORY, shuffle, schoolFor });
+Object.assign(PopoGame, { LOCATIONS, LEVELS, NATURAL_FISH, STORY, shuffle, schoolFor, schoolSize });
 })(window.PopoGame = window.PopoGame || {});

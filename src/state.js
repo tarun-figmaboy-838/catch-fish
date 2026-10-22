@@ -7,7 +7,6 @@ const PHASE = {
   INTRO: 'intro',
   PUZZLE_READY: 'puzzleReady',
   DRAGGING: 'dragging',
-  CORRECT: 'correct',
   NET_LOWERING: 'netLowering',
   CATCHING: 'catching',
   NET_RAISING: 'netRaising',

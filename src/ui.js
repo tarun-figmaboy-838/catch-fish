@@ -2,7 +2,62 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
-const NUDGE = 12; // arrow keys move the net's corner this many logical pixels
+const NUDGE = 12; // an arrow key's direction, in logical pixels; the corner moves a stop that way
+const LONG_LINE = 7; // a sentence of more words than this breaks at its comma
+
+// Text into a parent, with each ∠ drawn: Fredoka has no angle sign and other fonts draw it
+// small and low, so it is a little line drawing in the text's colour, sized to its capitals. The
+// sign itself stays in the text, unseen, so the line still reads (and copies) as written.
+const ANGLE = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M10.5 1.5 2 10.5h9.5"/></svg>';
+function appendText(parent, text) {
+  text.split(/(∠)/).forEach((bit) => {
+    if (!bit) return;
+    if (bit !== '∠') { parent.appendChild(document.createTextNode(bit)); return; }
+    const angle = document.createElement('span');
+    angle.className = 'ang';
+    angle.innerHTML = ANGLE;
+    const sign = document.createElement('span');
+    sign.className = 'ang-sign';
+    sign.textContent = bit;
+    angle.appendChild(sign);
+    parent.appendChild(angle);
+  });
+}
+
+// A line split into the words it is delivered in. Each word is a list of pieces ({ text, em })
+// so a *starred* part keeps its highlight, and `newLine` marks a word that starts a new part of
+// the line: after a sentence (or a colon), and at the comma nearest the middle of a long
+// sentence. The line stays one line; each new part comes after a beat, with a bounce, so the
+// child takes in one idea at a time.
+function wordsOf(text) {
+  const words = [];
+  let word = null;
+  text.split(/(\*[^*]+\*)/).forEach((part) => {
+    if (!part) return;
+    const em = part.length > 2 && part.startsWith('*') && part.endsWith('*');
+    (em ? part.slice(1, -1) : part).split(/(\s+)/).forEach((bit) => {
+      if (!bit) return;
+      if (!bit.trim()) { word = null; return; }
+      if (!word) words.push(word = { pieces: [], text: '', em: false, newLine: false });
+      word.pieces.push({ text: bit, em });
+      word.text += bit;
+      word.em = word.em || em;
+    });
+  });
+  words.forEach((w, i) => { if (i && /[.!?:…]$/.test(words[i - 1].text)) w.newLine = true; });
+  const starts = words.map((w, i) => (!i || w.newLine ? i : -1)).filter((i) => i >= 0);
+  starts.forEach((from, n) => {
+    const to = n + 1 < starts.length ? starts[n + 1] : words.length;
+    if (to - from <= LONG_LINE) return;
+    const middle = (from + to) / 2;
+    let best = -1;
+    for (let i = from + 1; i < to - 1; i += 1) {
+      if (words[i].text.endsWith(',') && (best < 0 || Math.abs(i + 1 - middle) < Math.abs(best + 1 - middle))) best = i;
+    }
+    if (best >= 0) words[best + 1].newLine = true;
+  });
+  return words;
+}
 
 // Fills an element with text whose *starred* words are highlighted.
 function markup(el, text) {
@@ -23,8 +78,8 @@ function markup(el, text) {
 class UI {
   constructor() {
     this.el = {
-      hud: $('hud'), hits: $('hits'), handle: $('handle'), hand: $('hand'), start: $('screen-start'), loading: $('loading'), play: $('btn-play'),
-      instruction: $('instruction'), instructionText: $('instruction-text'), drop: $('btn-drop'),
+      hud: $('hud'), hits: $('hits'), handle: $('handle'), stepBack: $('step-back'), stepOn: $('step-on'), hand: $('hand'), start: $('screen-start'), loading: $('loading'), play: $('btn-play'),
+      instruction: $('instruction'), instructionText: $('instruction-text'), instructionSay: $('instruction-say'), drop: $('btn-drop'),
       sound: $('btn-sound'), pause: $('btn-pause'),
       pauseOverlay: $('overlay-pause'), resume: $('btn-resume'), restart: $('btn-restart'),
       completeOverlay: $('overlay-complete'), completeTitle: $('complete-title'), completeLesson: $('complete-lesson'), again: $('btn-again'),
@@ -45,6 +100,10 @@ class UI {
     this.el.drop.addEventListener('click', h('drop'));
     this.el.again.addEventListener('click', h('again'));
     this.wireHandle();
+    // the arrows beside the knob: a tap moves the corner one stop that way
+    for (const [el, steps] of [[this.el.stepBack, -1], [this.el.stepOn, 1]]) {
+      el.addEventListener('click', (e) => { e.preventDefault(); this.emit('step', steps); });
+    }
   }
 
   on(name, fn) {
@@ -102,7 +161,27 @@ class UI {
 
   showHandle(on) {
     this.el.handle.hidden = !on;
-    if (!on) this.dragId = null;
+    if (!on) {
+      this.dragId = null;
+      this.placeSteps(null, null);
+    }
+  }
+
+  // The tap targets over the two arrows beside the knob (stage points, or null for an arrow
+  // at the end of the track, which isn't drawn).
+  placeSteps(back, on) {
+    for (const [el, p] of [[this.el.stepBack, back], [this.el.stepOn, on]]) {
+      el.hidden = !p || this.el.handle.hidden;
+      if (p) el.style.transform = `translate(${(p.x * this.scale).toFixed(1)}px, ${(p.y * this.scale).toFixed(1)}px)`;
+    }
+  }
+
+  // How far the arrows sit from the knob, in CSS pixels: just clear of the knob's own (bigger)
+  // target, so a drag that starts on the knob's edge never taps an arrow instead.
+  // (The sizes are the CSS's: the knob's target is max(60px, 8.4em), an arrow's 44px.)
+  arrowGap() {
+    const em = parseFloat(getComputedStyle(this.el.hits).fontSize);
+    return Math.max(60, 8.4 * em) / 2 + 22 + 4;
   }
 
   // Drop Net, the one action: 'on' while the child solves, 'hidden' while the net is down. It
@@ -248,41 +327,71 @@ class UI {
     this.el.hud.hidden = false;
   }
 
-  // *word* is highlighted. The panel gives a little boing on every change.
-  setInstruction(text) {
-    this.el.instruction.classList.toggle('empty', !text);
-    if (text === this.instructionShown) return;
-    this.instructionShown = text;
-    markup(this.el.instructionText, text);
-    if (!text) return;
-    this.el.instruction.classList.remove('say', 'pulse');
-    this.fitInstruction();
-    void this.el.instruction.offsetWidth;
-    this.el.instruction.classList.add('say');
+  // --- delivered text ------------------------------------------------------------
+  // Lays a line out in `el` as hidden words for the game to show one at a time (Game.deliver).
+  // Laid out whole first, the plate is its final size from the start and never changes as the
+  // words come. `plate` is what bounces as each new part of the line begins.
+  layWords(el, plate, text) {
+    const words = wordsOf(text);
+    el.textContent = '';
+    const spans = words.map((w, i) => {
+      if (i) el.appendChild(document.createTextNode(' '));
+      const span = document.createElement('span');
+      span.className = w.em ? 'w em' : 'w';
+      for (const piece of w.pieces) {
+        if (!piece.em) { appendText(span, piece.text); continue; }
+        const b = document.createElement('b');
+        b.className = 'hl';
+        appendText(b, piece.text);
+        span.appendChild(b);
+      }
+      el.appendChild(span);
+      return span;
+    });
+    this.delivered = { words, spans, plate };
+    return words;
   }
 
-  // A prompt that wraps is balanced over its lines (in the CSS); its plate then hugs the widest
-  // line instead of keeping the full width, so no empty space sits beside the words. Line boxes
-  // come scaled by any animation running on the HUD, so they're scaled back.
+  // The next word pops in (a stressed one with a boing); a word that starts a new sentence
+  // gives its plate a little bounce.
+  showWord(i) {
+    const d = this.delivered;
+    if (!d || !d.spans[i]) return;
+    d.spans[i].classList.add('in');
+    if (i && d.words[i].newLine) {
+      d.plate.classList.remove('say', 'pulse', 'bump');
+      void d.plate.offsetWidth;
+      d.plate.classList.add('bump');
+    }
+  }
+
+  // The instruction plate: a prompt, praise or hint, its words hidden until the game shows them.
+  // Screen readers get the whole line at once. The plate gives a little boing on every change.
+  setInstruction(text) {
+    const plate = this.el.instruction;
+    plate.classList.toggle('empty', !text);
+    this.el.instructionSay.textContent = text.replace(/\*/g, '');
+    const words = this.layWords(this.el.instructionText, plate, text);
+    if (!text) return words;
+    plate.classList.remove('say', 'pulse', 'bump');
+    this.fitInstruction();
+    void plate.offsetWidth;
+    plate.classList.add('say');
+    return words;
+  }
+
+  // The instruction is always one line, never two: one too long for the room between the
+  // corner buttons has its words shrunk until it fits. Layout widths ignore the plate's
+  // animations, so this holds mid-boing too.
   fitInstruction() {
     const t = this.el.instructionText;
-    t.style.width = '';
-    const drawn = t.getBoundingClientRect().width / t.offsetWidth || 1;
-    const range = document.createRange();
-    range.selectNodeContents(t);
-    const lines = [];
-    for (const r of range.getClientRects()) {
-      if (!r.width) continue;
-      const line = lines.find((l) => Math.abs(l.top - r.top) < r.height / 2);
-      if (line) {
-        line.left = Math.min(line.left, r.left);
-        line.right = Math.max(line.right, r.right);
-      } else {
-        lines.push({ top: r.top, left: r.left, right: r.right });
-      }
-    }
-    if (lines.length < 2) return;
-    t.style.width = `${Math.ceil(Math.max(...lines.map((l) => l.right - l.left)) / drawn) + 2}px`;
+    const plate = this.el.instruction;
+    t.style.fontSize = '';
+    if (!t.textContent) return;
+    const column = parseFloat(getComputedStyle(plate.parentElement).gridTemplateColumns.split(' ')[1]);
+    const box = getComputedStyle(plate);
+    const room = column - parseFloat(box.paddingLeft) - parseFloat(box.paddingRight) - parseFloat(box.borderLeftWidth) * 2;
+    if (t.scrollWidth > room) t.style.fontSize = `${(room / t.scrollWidth).toFixed(3)}em`;
   }
 
   pulseInstruction() {
@@ -310,10 +419,12 @@ class UI {
     this.el.again.focus({ preventScroll: true });
   }
 
-  // The final card's lesson line, one property at a time.
+  // The final card's lesson line, one property at a time, delivered word by word like the
+  // instruction plate.
   setLesson(text) {
-    markup(this.el.completeLesson, text);
+    const words = this.layWords(this.el.completeLesson, this.el.completeLesson, text);
     this.pop(this.el.completeLesson);
+    return words;
   }
 
   // --- hint hand ---------------------------------------------------------------

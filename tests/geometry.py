@@ -3,9 +3,11 @@
 For each of the eight levels, at the solved position the level's property holds exactly
 (parallel sides, matching lengths, matching or supplementary angles, bisecting diagonals, or
 the whole parallelogram) and Check passes; at the starting position Check fails, the frame is
-still a simple quadrilateral with most of its area, and the corner is well outside the snap
-radius. Also: the solved net hangs clear of the water, the school's water lies inside the
-lowered net, the corner's limits contain its place, and its touch target is child-sized.
+still a simple quadrilateral with most of its area, and the corner is well away from its place.
+Along the corner's track, the one stop that is its place passes Drop Net and every other stop
+fails, and the numbers the net shows match at that stop and at no other (so the numbers never
+say right while Drop Net says wrong, or the other way round). Also: the solved net hangs clear
+of the water, the school's water lies inside the lowered net, and the touch target is big enough.
 """
 from pathlib import Path
 from playwright.sync_api import sync_playwright
@@ -27,6 +29,24 @@ CHECKS = '''() => {
     const startSimple = geo.isSimpleQuad(start);
     const startArea = geo.area(start) / geo.area(net.solved);
     const distance = geo.distance(start[net.movable], net.target) / net.nearby;
+    // every stop on the track: does Drop Net pass, and do the numbers on the net match?
+    const shown = {
+      parallel: () => net.pairParallel(level.sides),
+      length: () => net.metresShown(level.side).toFixed(1) === level.metres[level.reference].toFixed(1),
+      sides: () => net.metresShown('CD').toFixed(1) === level.metres.AB.toFixed(1) && net.metresShown('BC').toFixed(1) === level.metres.AD.toFixed(1),
+      angle: () => net.degreesShown(level.vertex) === level.degrees,
+      supplementary: () => net.degreesShown(level.vertex) === 180 - level.degrees,
+      diagonals: () => { const h = net.halvesShown(); return h.AO === h.OC && h.BO === h.OD; },
+      parallelogram: () => net.metresShown('AB') === net.metresShown('CD') && net.metresShown('BC') === net.metresShown('AD'),
+    }[level.type];
+    const stops = [];
+    for (let k = net.track.min; k <= net.track.max; k += 1) {
+      net.setHandle(net.stop(k));
+      stops.push({ k, ok: net.check().ok, match: shown() });
+    }
+    const track = { min: net.track.min, max: net.track.max, start: net.stopAt,
+      passOnlyAtPlace: stops.every((s) => s.ok === (s.k === 0)), numbersAgree: stops.every((s) => s.match === s.ok),
+      bad: stops.filter((s) => s.ok !== (s.k === 0) || s.match !== s.ok).map((s) => s.k) };
     net.showSolved();
     const tiny = (a, b) => Math.abs(a - b) < 0.05;
     const property = {
@@ -52,7 +72,7 @@ CHECKS = '''() => {
     net.points = start;
     net.locked = false;
     return {
-      level: i + 1, type: level.type, property, solvedOk, startOk, startSimple, startArea, distance, inLimits, covered,
+      level: i + 1, type: level.type, property, solvedOk, startOk, startSimple, startArea, distance, inLimits, covered, track,
       clearOfWater: g.netRest.y + Math.max(...net.solved.map((p) => p.y)) <= g.waterline - 30,
       schoolSize: [a.right - a.left, a.bottom - a.top],
     };
@@ -85,6 +105,13 @@ def main():
                 problems.append(f'starting corner too close to its place ({r["distance"]:.1f} "nearby" radii)')
             if not r['inLimits']:
                 problems.append('the corner cannot be dragged to its place')
+            t = r['track']
+            if not (t['min'] < 0 < t['max'] or (t['min'] < 0 and t['start'] < 0) or (t['max'] > 0 and t['start'] > 0)):
+                problems.append(f'the track does not run through its place {t}')
+            if not t['passOnlyAtPlace']:
+                problems.append(f'Drop Net passes away from the place, or not at it, at stops {t["bad"]}')
+            if not t['numbersAgree']:
+                problems.append(f'the numbers on the net disagree with Drop Net at stops {t["bad"]}')
             if not r['clearOfWater']:
                 problems.append('solved net hangs in the water')
             if not r['covered']:
@@ -92,7 +119,7 @@ def main():
             if r['schoolSize'][0] < 200 or r['schoolSize'][1] < 110:
                 problems.append(f'school water too small {r["schoolSize"]}')
             print(('PASS' if not problems else 'FAIL') + f' level {r["level"]} ({r["type"]}): start {r["distance"]:.1f} radii away, '
-                  f'area {r["startArea"]:.2f}, school {r["schoolSize"][0]:.0f}x{r["schoolSize"][1]:.0f}' + (' -- ' + '; '.join(problems) if problems else ''), flush=True)
+                  f'area {r["startArea"]:.2f}, track {r["track"]["min"]}..{r["track"]["max"]} from {r["track"]["start"]}, school {r["schoolSize"][0]:.0f}x{r["schoolSize"][1]:.0f}' + (' -- ' + '; '.join(problems) if problems else ''), flush=True)
             failed = failed or bool(problems)
 
         page.evaluate('() => { const g = window.popoDebug.game; g.reset(); g.ui.showHud(); g.spawnSchool(); g.net.visible = true; g.beginPuzzle(); }')

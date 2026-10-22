@@ -175,7 +175,7 @@ async function opening(game) {
   const token = newToken();
   try {
     state.phase = PHASE.INTRO;
-    game.ui.setInstruction('');
+    game.instruct('');
     await popoArrives(game, token);
     for (const line of STORY.intro) await game.say(line, token);
     await firstPuzzle(game, token);
@@ -213,6 +213,8 @@ async function windNetUp(game, token) {
   const { net, winch, audio, fx } = game;
   const ms = fx.reduced ? 700 : 1100;
   const from = winch.ropeOut;
+  const to = Math.min(from, -TUCK); // a hauled-up bag already hangs high; it never drops to gather
+  const pouch = net.pouch;
   let last = net.furl;
   net.locked = true;
   winch.working = -1;
@@ -220,12 +222,14 @@ async function windNetUp(game, token) {
   await clock.tween(ms, token, (t) => {
     const k = ease.inOut(t);
     net.furl = k;
-    winch.setRopeOut(from + (-TUCK - from) * k);
+    net.pouch = pouch * (1 - k); // an emptied bag opens out as it gathers
+    winch.setRopeOut(from + (to - from) * k);
     winch.turn(-(k - last) * GATHER_ROPE);
     last = k;
     net.swing = fx.reduced ? 0 : Math.sin(t * Math.PI * 3) * 0.035 * (1 - t);
   });
   net.swing = 0;
+  net.pouch = 0;
   winch.working = 0;
 }
 
@@ -256,40 +260,28 @@ async function letNetDown(game, token, from = null) {
   winch.working = 0;
 }
 
-async function slideCorner(net, from, to, token, ms = 480) {
-  await clock.tween(ms, token, (t) => net.setHandle(geo.lerp(from, to, ease.outBack(t))));
-  net.setHandle(to);
-}
-
 // --- the puzzle -------------------------------------------------------------------
-// A right frame: the corner glides to its exact place and locks, and the property lights up
-// with its praise; it waits until every fish has swum in.
-async function lockAnswer(game, result, token) {
-  const { net, popo, fx, audio, ui } = game;
+// A right frame: the corner (already on its exact place, the one stop that has the property)
+// locks with a click, the property lights up step by step and the praise is said, all while the
+// net goes down: the child dropped it now, for the fish under it, so nothing holds it back.
+function lockAnswer(game, result) {
+  const { net, popo, fx, audio } = game;
   const level = LEVELS[state.level];
-  const from = { ...net.points[net.movable] };
-  if (geo.distance(from, result.snap) > 0.5) await slideCorner(net, from, result.snap, token, 260);
   net.solve(result.snap);
   audio.play('snap');
   const snapped = net.toStage(result.snap);
   fx.sparkle(snapped.x, snapped.y, 14);
-  state.phase = PHASE.CORRECT;
   popo.react('happy', 1.2);
-  await clock.wait(140, token);
-  const final = level.type === 'parallelogram';
-  net.showGlow(net.glowFor(level), final ? 0.5 : 0.8);
+  net.showGlow(net.glowFor(level), level.type === 'parallelogram' ? 0.5 : 0.8);
   audio.play('success');
-  ui.setInstruction(level.praise);
-  const spoken = game.speak(level.praise);
-  await clock.wait(Math.max(1000, spoken * 1000 + 200, net.glowLength(level) * 1000), token);
-  while (state.fish.some((f) => f.offstage || f.entering)) await clock.wait(100, token);
+  game.instruct(level.praise);
 }
 
 // After the hint the prompt returns, and the child carries on from the frame as they left it;
 // its corner gives a wobble to say it's the one to fix.
 function backToPuzzle(game, level) {
   const { net, ui, audio } = game;
-  ui.setInstruction(level.prompt);
+  game.instruct(level.prompt, { voice: false, pace: 0.09 });
   net.locked = false;
   net.wobble = 1;
   audio.play('wobble');
@@ -300,22 +292,34 @@ function backToPuzzle(game, level) {
 }
 
 // --- the catch ------------------------------------------------------------------------
+// Hauled up with a catch, the ring rises this far above where it rests, so the bag the net
+// closes into clears the water.
+const HAUL = 42;
+
 // Drop Net tests the frame for the level's property. A right one locks with its praise and goes
-// down for the catch; a wrong one goes down all the same, and its catch breaks out of it.
+// down; a wrong one goes down all the same. In the water it nets whichever fish are under it as
+// it lands, so the child drops it as fish swim beneath. Hauled up, it closes into a bag around
+// its catch. A wrong net's catch breaks out; a right net that caught nothing comes up empty,
+// still right, to be dropped again.
 async function dropNet(game) {
   const token = newToken();
   const { net, winch, popo, fx, audio, ui } = game;
   const reduced = fx.reduced;
   try {
     const result = net.check();
-    const right = result.ok;
+    // once the frame has been right this level it stays right: only the timing is left to try
+    const right = game.netRight || result.ok;
     ui.showHandle(false);
     ui.setDrop('hidden');
-    if (right) await lockAnswer(game, result, token);
+    if (right && !game.netRight) {
+      lockAnswer(game, result);
+    } else {
+      game.instruct('');
+      audio.stopVoice();
+    }
+    game.netRight = right;
     state.phase = PHASE.NET_LOWERING;
     net.locked = true;
-    ui.setInstruction('');
-    audio.stopVoice();
     popo.squash = 0.07; // Popo takes hold of the wheel
     await clock.wait(200, token);
 
@@ -348,42 +352,64 @@ async function dropNet(game) {
         const corner = net.toStage(net.points[Math.random() < 0.5 ? 2 : 3]);
         fx.puff(corner.x, corner.y, 0, 1);
       }
-      game.herdFish();
     });
     net.swing = 0;
     winch.working = 0;
 
-    // the frame settles around the school; each fish inside is netted in turn
+    // the frame settles over whoever swam under it; each fish inside is netted in turn
     state.phase = PHASE.CATCHING;
-    const caught = state.fish.filter((f) => !f.gone && net.contains(f));
-    audio.play('bubbles');
+    const caught = state.fish.filter((f) => !f.gone && !f.leaving && !f.waiting && net.contains(f));
+    if (caught.length) audio.play('bubbles');
     for (const f of caught) {
-      f.catchAt(net.toNet(f));
+      f.catchAt(net.uvOf(net.toNet(f)));
       fx.puff(f.x, f.y, 0, 2, true);
       await clock.wait(70, token);
     }
     await clock.wait(reduced ? 250 : 420, token);
 
+    // Take up slack first: the mouth closes underwater before the loaded bag rises.
+    if (caught.length) {
+      winch.working = -1;
+      audio.crank(0.55);
+      let gathered = 0;
+      await clock.tween(reduced ? 300 : 550, token, (t) => {
+        const k = smooth(t);
+        net.pouch = 0.55 * k;
+        winch.turn(-24 * (k - gathered));
+        gathered = k;
+      });
+    }
+
+    // up it comes, closing into a bag around its catch, the fish sliding down into its belly
     state.phase = PHASE.NET_RAISING;
     const up = reduced ? 1100 : 1800;
+    const lift = caught.length ? HAUL : 0;
     winch.working = -1;
     audio.crank(up / 1000);
     let surfaced = false;
     await clock.tween(up, token, (t) => {
-      payOut(depth * (1 - smooth(t)));
+      const k = smooth(t);
+      payOut(depth * (1 - k) - lift * k);
+      if (caught.length) net.pouch = 0.55 + 0.45 * smooth(Math.min(1, t / 0.55));
+      net.swing = reduced || !caught.length ? 0 : Math.sin(t * Math.PI * 2) * 0.026 * Math.sin(t * Math.PI);
       const bottom = net.ring().y + net.bottom();
       if (!surfaced && bottom < game.waterline) {
         surfaced = true;
         game.netSplash();
         audio.play('drip');
       }
-      if (surfaced && Math.random() < 0.12) fx.drips(net.toStage(net.points[Math.random() < 0.5 ? 2 : 3]));
+      if (surfaced && Math.random() < 0.12) fx.drips(net.toStage(net.meshPoint(0.3 + Math.random() * 0.4, 1)));
     });
-    winch.setRopeOut(0);
+    winch.setRopeOut(-lift);
     winch.working = 0;
+    if (right) game.instruct(''); // the praise has been said; the catch speaks for itself
 
     if (!right) {
       await netBreaks(game, caught, token);
+      return;
+    }
+    if (!caught.length) {
+      await emptyNet(game, token);
       return;
     }
     state.phase = PHASE.LEVEL_COMPLETE;
@@ -391,7 +417,7 @@ async function dropNet(game) {
     popo.react('laugh', 1.6);
     audio.play('catch');
     const ring = net.ring();
-    fx.sparkle(ring.x, ring.y + net.bottom() / 2, 16);
+    fx.sparkle(ring.x, ring.y + net.bottom() * 0.7, 16);
     for (const f of caught) f.wiggle();
     await game.say(STORY.catch, token);
     await collectFish(game, caught, token);
@@ -401,11 +427,23 @@ async function dropNet(game) {
   }
 }
 
-// A wrong net can't hold its catch: the fish thrash until the mesh tears, and they dive back
-// into the sea. The level's hint shows while Popo winds the torn net up and lets it down
-// mended, in the shape the child left it.
+// A right net that came up empty: the fish swam on before it landed. Popo shrugs, and Drop Net
+// comes back for another try when fish are under the net; the frame stays right.
+async function emptyNet(game, token) {
+  const { popo, audio, ui } = game;
+  popo.react('think', 1.2);
+  audio.play('wobble');
+  await clock.wait(600, token);
+  state.phase = PHASE.PUZZLE_READY;
+  state.idleTime = 0;
+  ui.setDrop('on');
+}
+
+// A wrong net can't hold its catch: the fish thrash in the bag until it tears, and they drop
+// back into the sea. The level's hint shows while Popo winds the net up and lets it down
+// (mended, if it tore), in the shape the child left it.
 async function netBreaks(game, caught, token) {
-  const { net, popo, fx, audio, ui } = game;
+  const { net, popo, fx, audio } = game;
   const level = LEVELS[state.level];
   state.phase = PHASE.NET_BREAKING;
   if (caught.length) {
@@ -421,7 +459,7 @@ async function netBreaks(game, caught, token) {
       net.swing = fx.reduced ? 0 : Math.sin(t * 50) * 0.03 * Math.min(1, 0.3 + 0.8 * t) * Math.min(1, (1 - t) * 8);
     });
     net.swing = 0;
-    // ...until the mesh tears
+    // ...until the bag tears
     audio.play('rip');
     popo.react('think', 1.8);
     const hole = net.toStage(net.tearHole().centre);
@@ -434,38 +472,36 @@ async function netBreaks(game, caught, token) {
   }
   state.misses += 1;
   popo.react('think', 1.4);
-  ui.setInstruction(level.hint);
-  const spoken = game.speak(level.hint);
-  const hinted = clock.wait(Math.max(1800, spoken * 1000 + 300), token);
+  // the hint stays up a moment after it's said; it may be cancelled (a restart) before it's
+  // awaited, so its rejection is handled here too
+  const shown = game.instruct(level.hint);
+  const hinted = clock.wait(Math.max(1800, shown * 1000 + 800), token);
+  hinted.catch(() => {});
+  const torn = net.tear > 0;
   await windNetUp(game, token);
-  // mended while it's bundled up
-  net.tear = 0;
-  const bundle = net.toStage({ x: 0, y: net.bottom() });
-  fx.sparkle(bundle.x, bundle.y - 30, 10);
-  audio.play('puff');
+  if (torn) {
+    // mended while it's bundled up
+    net.tear = 0;
+    const bundle = net.toStage({ x: 0, y: net.bottom() });
+    fx.sparkle(bundle.x, bundle.y - 30, 10);
+    audio.play('puff');
+  }
   await letNetDown(game, token);
   await hinted;
   backToPuzzle(game, level);
 }
 
-// A netted fish wriggles free through the tear: out of the mesh in a little hop, down into the
-// sea with a splash, and on under the water to swim with its school again. Fish from either
-// side head across, under the net.
+// A netted fish wriggles free through the tear: out of the mesh in a little hop the way its lane
+// swims, down into the sea with a splash, and on to its lane's depth to swim with its school
+// again (the Sea eases it back into its place in the lane).
 async function escape(game, f, i, hole, token) {
   const { fx, audio } = game;
-  const area = game.fishArea;
   const waterline = game.waterline;
   await clock.wait(i * 110, token);
   const from = { x: f.x, y: f.y };
-  const dir = Math.sign(hole.x - from.x) || (Math.random() < 0.5 ? -1 : 1);
+  const dir = f.lane ? f.lane.dir : (Math.sign(hole.x - from.x) || 1);
   const entry = { x: from.x + dir * between(20, 60), y: waterline + 8 };
-  // where it rejoins the school, inside the water the school keeps to
-  const margin = f.w / 2 + 16;
-  const top = area.top + f.h / 2 + 18;
-  const land = {
-    x: Math.min(area.right - margin, Math.max(area.left + margin, entry.x + dir * between(50, 130))),
-    y: between(top, Math.max(top, area.bottom - f.h / 2 - 18)),
-  };
+  const land = { x: entry.x + dir * between(60, 120), y: f.lane ? f.lane.y : entry.y + 60 };
   const hop = between(30, 60);
   f.caught = null;
   f.dir = dir;
@@ -485,13 +521,12 @@ async function escape(game, f, i, hole, token) {
     f.y = entry.y + (land.y - entry.y) * k;
     f.pitch = 0.9 * (1 - k);
   });
-  // swimming again, from exactly where it is (on its drift curve, as when it was made)
+  // swimming again, from exactly where it is (on its float, so it never jumps)
   f.frozen = false;
   f.pitch = 0;
   f.lastY = f.y;
   f.baseY = f.y - Math.sin(f.driftPhase) * f.driftAmp;
-  f.targetY = f.baseY;
-  f.speed = f.cruise;
+  f.speed = f.lane ? f.lane.speed : 50;
   f.puffs += 2;
 }
 
@@ -535,7 +570,15 @@ async function nextLevel(game, token) {
     await celebrate(game, token);
     return;
   }
-  state.fish = [];
+  // the fish the net missed swim on and are joined by more for the next net (rowing to new
+  // waters, they come along); only for the golden school do they swim off out of the sea, as
+  // the golden fish swim in behind them
+  state.fish = state.fish.filter((f) => !f.gone && !f.caught);
+  if (Boolean(LEVELS[next].rare) !== Boolean(LEVELS[state.level].rare)) {
+    for (const f of state.fish) f.swimAway();
+    game.strays.push(...state.fish.filter((f) => !f.gone));
+    state.fish = [];
+  }
   game.audio.play('complete');
   await clock.wait(500, token);
   if (LEVELS[next].location !== state.locationIndex) await rowTo(game, LEVELS[next].location, token);
@@ -606,7 +649,7 @@ async function rowTo(game, nextIndex, token) {
 async function celebrate(game, token) {
   const { popo, fx, audio, ui, net } = game;
   state.phase = PHASE.GAME_COMPLETE;
-  ui.setInstruction('');
+  game.instruct('');
   audio.play('tada');
   popo.react('laugh', 2.2);
   const ring = net.ring();
@@ -622,9 +665,8 @@ async function celebrate(game, token) {
   const spoken = game.speak(STORY.title);
   await clock.wait(Math.max(1200, spoken * 1000 + 250), token);
   for (const lesson of STORY.lessons) {
-    ui.setLesson(lesson);
-    const said = game.speak(lesson);
-    await clock.wait(Math.max(1700, said * 1000 + 450), token);
+    const said = game.teach(lesson);
+    await clock.wait(Math.max(1700, said * 1000 + 700), token);
   }
 }
 

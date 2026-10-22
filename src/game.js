@@ -1,12 +1,50 @@
 (function (PopoGame) {
 'use strict';
-const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, spawnSchool, refreshShadows, LOCATIONS, LEVELS, schoolFor, Popo, Winch, Net, TUCK, opening, startLevels, dropNet, Cancelled, STAGE_W, STAGE_H, SCENE_SHIFT, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
+const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, Sea, refreshShadows, LOCATIONS, LEVELS, schoolFor, Popo, Winch, Net, TUCK, opening, startLevels, dropNet, Cancelled, STAGE_W, STAGE_H, SCENE_SHIFT, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
 
 const HINT_REPEAT = 7;    // seconds of idling between hints once one has been shown
 const NET_CLEARANCE = 40; // the net's bottom edge hangs this far above the water
 const SCHOOL_TOP = 55;    // the school keeps this far below the surface
 const SCHOOL_MARGIN = 26; // and this far inside the net's footprint
 const TICK_GAP = 90;      // ms between measurement ticks while dragging
+const SWIM_BEYOND = 100;  // the school roams the whole sea, turning just out of sight at its ends
+const READ_PACE = 0.26;   // seconds a word stays new when a line is shown without its recording
+const QUICK_PACE = 0.09;  // ...and when a line the child has just heard comes back
+
+// How long a word takes to say, roughly, in letters: a symbol or a number is read as words
+// ("∠" angle, "=" is, "°" degrees, "m" metres, 180 one hundred eighty), a capital letter on its
+// own is spelled out, and punctuation adds a beat.
+function sayLength(text) {
+  const bare = text.replace(/[^a-z0-9']/gi, '');
+  let n = /^[A-Z]{1,2}$/.test(bare) ? bare.length * 3 : bare.replace(/[0-9]/g, '').length;
+  for (const digits of bare.match(/[0-9]+/g) || []) n += [0, 4, 8, 16, 20][Math.min(4, digits.length)];
+  n += (text.match(/∠/g) || []).length * 5 + (text.match(/=/g) || []).length * 2 + (text.match(/°/g) || []).length * 7;
+  if (/^m[.,]?$/.test(text)) n = 6;
+  return Math.max(2, n) + (text.endsWith('…') ? 5 : /[.!?:]$/.test(text) ? 3 : text.endsWith(',') ? 2 : 0);
+}
+
+// When each word of a recorded line is said: the recording shared out by the words' lengths.
+function spokenTimes(words, seconds) {
+  const total = words.reduce((sum, w) => sum + sayLength(w.text), 0);
+  let at = 0;
+  return words.map((w) => {
+    const t = (at / total) * seconds * 0.88;
+    at += sayLength(w.text);
+    return t;
+  });
+}
+
+// When each word of a line shown without its recording appears: a steady pace, a pause after
+// punctuation and a comic beat before each new line.
+function readingTimes(words, pace) {
+  let at = 0;
+  return words.map((w, i) => {
+    if (i && w.newLine) at += pace;
+    const t = at;
+    at += pace + (/[.!?:]$/.test(w.text) ? pace : w.text.endsWith(',') ? pace / 2 : 0);
+    return t;
+  });
+}
 
 // The title banner: its water surface, sand line, the play button floating in its water, where
 // the hooked fish splashes, and sparkle points along the logo's snowy edges.
@@ -36,6 +74,11 @@ class Game {
     this.raftRippleIn = 1;
     this.dialogue = null;
     this.leapers = [];
+    this.sea = new Sea();  // the school's lanes in these waters
+    this.strays = [];      // fish swimming out of the sea as the golden school swims in
+    this.delivery = null;  // the words of the instruction plate (or final card) still to appear
+    this.netRight = false; // the frame has been proven right this level; only the timing is left
+    this.handShown = false;
     this.poof = null;
     this.ambient = [];
     this.hop = null;
@@ -109,19 +152,25 @@ class Game {
     this.winch = new Winch();
     this.net = new Net();
     this.net.textScale = this.labelScale();
+    this.net.arrowGap = this.ui.arrowGap() / this.stage.scale;
     // until Popo lets it down, the net hangs wound up in a bundle under the boom's pulley
     this.net.visible = true;
     this.net.furl = 1;
     this.winch.setRopeOut(-TUCK);
     this.ambient = [];
     this.leapers = [];
+    this.strays = [];
+    this.sea = new Sea();
     this.hop = null;
     this.poof = null;
     this.hint = null;
     this.drag = null;
+    this.netRight = false;
     this.endLine();
-    this.ui.setInstruction('');
+    this.instruct('');
+    // a restart from the pause card must hand back the HUD and the net's corner
     this.ui.el.hud.inert = false;
+    this.ui.el.hits.inert = false;
     this.applyLocation();
     this.prepareLevel(0);
   }
@@ -170,24 +219,31 @@ class Game {
     const level = LEVELS[index];
     const net = this.net;
     const before = net.points.map((p) => ({ ...p }));
-    net.setLevel(level, this.waterline - NET_CLEARANCE - this.netRest.y);
-    // the corner stays clear of the raft and inside the stage
-    const limits = net.limits;
-    limits.left = Math.max(limits.left, this.popo.raftEnds().right + 60 - this.netRest.x);
-    limits.right = Math.min(limits.right, STAGE_W - 48 - this.netRest.x);
+    // the corner's track stays clear of the raft and inside the stage
+    net.setLevel(level, this.waterline - NET_CLEARANCE - this.netRest.y, {
+      left: this.popo.raftEnds().right + 60 - this.netRest.x, right: STAGE_W - 48 - this.netRest.x,
+    });
     const span = net.innerSpan();
     const top = this.waterline + SCHOOL_TOP;
+    // the water right under the net, down to where the lowered net reaches...
     this.fishArea = {
       left: this.netRest.x + span.left + SCHOOL_MARGIN, right: this.netRest.x + span.right - SCHOOL_MARGIN,
       top, bottom: top + (span.bottom - span.top) - 40,
     };
+    // ...and the school roams the whole sea at that depth, so the net catches whoever is under it
+    // when it lands: the child drops it as fish swim beneath
+    this.swimArea = { left: -SWIM_BEYOND, right: STAGE_W + SWIM_BEYOND, top: this.fishArea.top, bottom: this.fishArea.bottom };
     this.hintShown = false;
+    this.handShown = false;
     return before;
   }
 
+  // Fills these waters' school for the level: the fish already swimming stay, glide to the
+  // new lane depths and are joined by newcomers; each level's school swims a little quicker.
   spawnSchool() {
     const level = LEVELS[state.level];
-    state.fish = spawnSchool(schoolFor(level), this.fishArea, level.rare);
+    const pace = (65 + 7 * state.level) * (level.rare ? 1.15 : 1);
+    state.fish = this.sea.stock(state.fish, this.swimArea, schoolFor(level), { rare: level.rare, pace });
     this.ambient = refreshShadows(this.ambient, 4, this.area);
   }
 
@@ -204,18 +260,52 @@ class Game {
     state.idleTime = 0;
     state.misses = 0;
     this.net.locked = false;
-    this.lastTick = { value: this.net.liveValue(), at: 0 };
+    this.netRight = false;
+    this.lastTick = { value: this.net.stopAt, at: 0 };
     this.popo.idle();
     this.ui.showHandle(true);
     this.ui.setDrop('on');
-    this.ui.setInstruction(level.prompt);
-    this.speak(level.prompt);
+    this.instruct(level.prompt);
   }
 
   // Reads a line aloud (when it has a recording) for children who can't read it yet. Returns
   // the recording's length in seconds, so text changes can wait for it.
   speak(text) {
     return this.dialogue ? 0 : this.audio.speak('narrator', text);
+  }
+
+  // --- text delivery ------------------------------------------------------------
+  // The instruction plate (a prompt, praise or hint) and the final card's lessons come word by
+  // word, each sentence on a line of its own (see UI.layWords): in time with the voice when the
+  // line is read aloud, or at a reading pace when it isn't. Words pop in, stressed ones boing,
+  // and the plate bounces as each new line starts. Returns how long that takes, in seconds.
+  instruct(text, { voice = true, pace = READ_PACE } = {}) {
+    return this.deliver(this.ui.setInstruction(text), text, voice, pace);
+  }
+
+  teach(text) {
+    return this.deliver(this.ui.setLesson(text), text, true, READ_PACE);
+  }
+
+  deliver(words, text, voice, pace) {
+    this.delivery = null;
+    if (!words.length) return 0;
+    const seconds = voice ? this.speak(text) : 0;
+    const times = seconds ? spokenTimes(words, seconds) : readingTimes(words, pace);
+    this.delivery = { times, next: 0, t: 0 };
+    this.updateDelivery(0);
+    return Math.max(seconds, times[times.length - 1] + pace);
+  }
+
+  updateDelivery(dt) {
+    const d = this.delivery;
+    if (!d) return;
+    d.t += dt;
+    while (d.next < d.times.length && d.t >= d.times[d.next]) {
+      this.ui.showWord(d.next);
+      d.next += 1;
+    }
+    if (d.next >= d.times.length) this.delivery = null;
   }
 
   // How far the ring must drop for the net's bottom edge (its higher corner, on a tilted net)
@@ -232,16 +322,6 @@ class Game {
     this.audio.play('splashSmall');
   }
 
-  // Fish just under the descending frame slow down and keep under it.
-  herdFish() {
-    const bottom = this.net.ring().y + this.net.bottom();
-    const centerX = this.net.ring().x;
-    for (const f of state.fish) {
-      if (f.gone || f.caught) continue;
-      if (f.y - bottom < 110 && f.y - bottom > -40) f.herd(centerX);
-    }
-  }
-
   announceComplete() {
     const detail = { levels: LEVELS.length, fish: state.caught };
     window.dispatchEvent(new CustomEvent('popo:complete', { detail }));
@@ -250,7 +330,7 @@ class Game {
 
   // --- input ----------------------------------------------------------------
   onDragStart(point) {
-    if (state.paused || state.phase !== PHASE.PUZZLE_READY) return;
+    if (state.paused || state.phase !== PHASE.PUZZLE_READY || this.netRight) return;
     state.phase = PHASE.DRAGGING;
     this.stopHint();
     const handle = this.net.points[this.net.movable];
@@ -267,9 +347,9 @@ class Game {
     this.tickMeasure();
   }
 
-  // A soft tick as the shown measurement changes, throttled so a fast drag doesn't rattle.
+  // A soft click each time the corner reaches a new stop, throttled so a fast drag doesn't rattle.
   tickMeasure() {
-    const value = this.net.liveValue();
+    const value = this.net.stopAt;
     const now = performance.now();
     if (value === this.lastTick.value) return;
     this.lastTick.value = value;
@@ -287,11 +367,22 @@ class Game {
   }
 
   onNudge(dx, dy) {
-    if (state.paused || state.phase !== PHASE.PUZZLE_READY) return;
+    if (state.paused || state.phase !== PHASE.PUZZLE_READY || this.netRight) return;
     this.stopHint();
     state.idleTime = 0;
-    const p = this.net.points[this.net.movable];
-    this.net.moveHandle({ x: p.x + dx, y: p.y + dy });
+    // an arrow key moves the corner a stop along its track, whichever way the track points it
+    const { dir } = this.net.along;
+    const along = dx * dir.x + dy * dir.y;
+    if (Math.abs(along) < 0.3 * Math.hypot(dx, dy)) return;
+    this.onStep(Math.sign(along));
+  }
+
+  // A tap on an arrow beside the knob (or an arrow key): one stop on or back along the track.
+  onStep(steps) {
+    if (state.paused || state.phase !== PHASE.PUZZLE_READY || this.netRight) return;
+    this.stopHint();
+    state.idleTime = 0;
+    this.net.stepHandle(steps);
     this.tickMeasure();
   }
 
@@ -314,7 +405,7 @@ class Game {
     if (point.y < this.waterline + 40) this.fx.ripple(point.x, this.waterline, 0.6);
     this.audio.play('bloop');
     for (const f of state.fish) {
-      if (f.gone || f.offstage) continue;
+      if (f.gone || f.waiting) continue;
       if (Math.hypot(f.x - point.x, f.y - point.y) < 300) f.lookAt(point);
     }
     this.fishReacts(point);
@@ -331,13 +422,13 @@ class Game {
     let near = null;
     let best = 230;
     for (const f of [...state.fish, ...this.ambient]) {
-      if (f.gone || f.offstage || f.frozen || f.entering || !f.flip) continue;
+      if (f.gone || f.frozen || f.leaving || f.waiting || !f.flip) continue;
       const d = Math.hypot(f.x - point.x, f.y - point.y);
       if (d < best && (f.reactedAt || 0) < now - 1200) { best = d; near = f; }
     }
     if (!near) return;
     near.reactedAt = now;
-    const tricks = ['flip', 'bubbles', 'dart'].filter((t) => t !== this.lastTrick);
+    const tricks = ['flip', 'bubbles', 'shiver'].filter((t) => t !== this.lastTrick);
     const trick = tricks[Math.floor(Math.random() * tricks.length)];
     this.lastTrick = trick;
     if (trick === 'flip') {
@@ -417,6 +508,7 @@ class Game {
     this.stage.resize();
     this.ui.setScale(this.stage.scale);
     this.net.textScale = this.labelScale();
+    this.net.arrowGap = this.ui.arrowGap() / this.stage.scale;
     // keep the bubble, the corner and the hint on their marks even while paused
     if (this.dialogue && this.dialogue.who !== 'narrator') this.placeSpeech();
     this.placeHandle();
@@ -453,7 +545,8 @@ class Game {
   // reasons rather than copies. No hint says whether the net is right: Drop Net does. Any
   // touch cancels a hint.
   updateHint(dt) {
-    if (state.phase !== PHASE.PUZZLE_READY) return;
+    // a right frame waiting for its next drop needs no hint: the timing is the child's
+    if (state.phase !== PHASE.PUZZLE_READY || this.netRight) return;
     if (this.hint) {
       if (this.hint.drag) this.advanceHand(dt);
       else if ((this.hint.t += dt) > 2.4) { this.stopHint(); state.idleTime = 0; }
@@ -464,14 +557,20 @@ class Game {
     if (state.idleTime > delay) this.showHint();
   }
 
+  // The first hint reads the prompt again, word by word; later ones give the plate a nudge.
+  // The hand shows the drag once, on the first net only.
   showHint() {
-    const drag = state.level === 0;
+    const drag = state.level === 0 && !this.handShown;
     this.hint = { t: 0, drag };
-    this.ui.pulseInstruction();
     this.audio.play('hint');
-    if (drag) this.ui.showHand(true);
-    else this.net.hintPulse = 2.4;
-    if (!this.hintShown) this.speak(LEVELS[state.level].prompt);
+    if (drag) {
+      this.handShown = true;
+      this.ui.showHand(true);
+    } else {
+      this.net.hintPulse = 2.4;
+    }
+    if (this.hintShown) this.ui.pulseInstruction();
+    else this.instruct(LEVELS[state.level].prompt);
     this.hintShown = true;
   }
 
@@ -499,6 +598,8 @@ class Game {
   placeHandle() {
     const h = this.net.handle();
     this.ui.placeHandle(h.x, h.y);
+    const arrows = this.net.arrowPoints(h);
+    this.ui.placeSteps(arrows.back, arrows.on);
   }
 
   // --- travel -----------------------------------------------------------------
@@ -551,15 +652,7 @@ class Game {
   // Spreads the words over the recording by length, with a beat after punctuation, so each
   // word appears as it's spoken. The bubble stays up a moment after the voice finishes.
   paceToVoice(d, seconds) {
-    const weight = (w) => Math.max(2, w.text.replace(/[^a-z0-9']/gi, '').length)
-      + (w.text.endsWith('…') ? 5 : /[.!?]$/.test(w.text) ? 3 : w.text.endsWith(',') ? 2 : 0);
-    const total = d.words.reduce((sum, w) => sum + weight(w), 0);
-    let at = 0;
-    d.times = d.words.map((w) => {
-      const t = (at / total) * seconds * 0.88;
-      at += weight(w);
-      return t;
-    });
+    d.times = spokenTimes(d.words, seconds);
     d.elapsed = 0;
     d.voiced = true;
     // after the voice ends, the line stays long enough for a young reader to finish it
@@ -826,6 +919,7 @@ class Game {
     this.rideWaves(dt);
     if (this.poof && (this.poof.t += dt) > 0.6) this.poof = null;
     this.updateDialogue(dt);
+    this.updateDelivery(dt);
     this.updateStoryFx(dt);
     this.watchFrameRate(dt);
 
@@ -838,23 +932,25 @@ class Game {
     popo.setMachine(winch);
     // hanging on its sling, the net sways a touch while it waits (easing into it, never with a
     // jump); it holds still for a drag
-    const idle = state.phase === PHASE.PUZZLE_READY || state.phase === PHASE.CORRECT;
+    const idle = state.phase === PHASE.PUZZLE_READY;
     if (idle && !this.fx.reduced) net.swing += (Math.sin(this.fx.t * 0.9) * 0.008 - net.swing) * Math.min(1, dt * 2);
     else if (state.phase === PHASE.DRAGGING) net.swing *= Math.max(0, 1 - dt * 6);
     net.update(dt);
 
+    // the school and any fish swimming out of the sea share the lanes
+    if (state.fish.length || this.strays.length) this.sea.steer([...state.fish, ...this.strays], this.swimArea, dt);
     for (const f of state.fish) {
       if (f.gone) continue;
       if (f.caught) {
-        // netted fish hang in the mesh, swaying a touch with the net
-        const p = net.toStage(f.caught);
+        // netted fish hang in the mesh, swaying with the net, and slide into its bag as it closes
+        const p = net.toStage(net.catchPoint(f.caught));
         f.x = p.x;
         f.y = p.y;
-        f.update(dt, this.fishArea, state.fish);
+        f.update(dt, this.swimArea);
         continue;
       }
-      f.update(dt, this.fishArea, state.fish);
-      if (f.offstage) continue;
+      f.update(dt, this.swimArea);
+      if (f.waiting) continue; // still out of sight, waiting to swim in
       if (f.breath <= 0 && !f.frozen) {
         f.breath = 1.6 + Math.random() * 2.6;
         f.puffs += 1 + Math.floor(Math.random() * 3);
@@ -863,12 +959,11 @@ class Game {
         this.puffFrom(f, f.puffs);
         f.puffs = 0;
       }
-      if (f.trail > 0 && Math.random() < dt * 14) {
-        this.fx.puff(f.x - f.dir * f.w * 0.45, f.y + (Math.random() - 0.5) * f.h * 0.3, -f.dir * 0.4, 1);
-      }
       // the prize fish leave a glint now and then
       if (f.rare && Math.random() < dt * 0.6) this.fx.sparkle(f.x - f.dir * f.w * 0.3, f.y + (Math.random() - 0.5) * f.h * 0.5, 1);
     }
+    for (const f of this.strays) f.update(dt, this.swimArea);
+    if (this.strays.some((f) => f.gone)) this.strays = this.strays.filter((f) => !f.gone);
     if (this.ambient.some((f) => f.gone)) this.ambient = this.ambient.filter((f) => !f.gone);
     for (const f of this.ambient) f.update(dt, this.area);
     if (state.phase === PHASE.PUZZLE_READY || state.phase === PHASE.DRAGGING) this.placeHandle();
@@ -1058,6 +1153,7 @@ class Game {
     const offset = this.drawBackground(ctx);
     this.fx.drawWater(ctx, offset, state.fish);
     for (const f of this.ambient) f.draw(ctx);
+    for (const f of this.strays) f.draw(ctx);
     for (const f of state.fish) if (!f.flying) f.draw(ctx);
     for (const f of this.leapers) f.draw(ctx);
     this.fx.drawSplashLayer(ctx, false);

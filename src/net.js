@@ -13,9 +13,27 @@ const TAU = Math.PI * 2;
 const CORNERS = 'ABCD';
 const corner = (letter) => CORNERS.indexOf(letter);
 const side = (name) => [corner(name[0]), corner(name[1])];
-// child-sized tolerances: about three and a half degrees of parallel, a quarter metre, three
-// degrees of angle, and a third of a metre between the halves of a diagonal
-const TOLERANCE = { parallel: 0.06, metres: 0.25, degrees: 3, halves: 0.3 };
+// The corner the child moves never stretches freely: it slides along a track (see setLevel)
+// and clicks from stop to stop, STOP stage pixels apart. One stop is its exact place, so the
+// frame is right exactly there, and only there do the numbers on the net match.
+const STOP = 20;
+const TRACK_STOPS = 12; // at most this many stops each way from its place
+// a hair of rounding for "exactly": a stop either has the property or misses it by a step
+const EXACT = { parallel: 1e-3, metres: 0.01, degrees: 0.1 };
+const tenths = (m) => Math.round(m * 10) / 10;
+// The loaded bag hangs below the open frame by this much, keeping the hauled catch
+// clear of the water. Its mouth and toe gather around a broad rounded belly.
+const POUCH = { depth: 0.3, most: 45 };
+const NECK = 0.012; // above this (a share down the net) the floats fold away as the bag closes
+
+// The closed bag's half-width down its length (t from mouth to toe), as a share of the net's
+// width: a potli. A short neck gathered narrow enough to go up into the ring's bottom bar, round
+// shoulders that fill out quickly below it, the full loaded belly and a rounded bottom.
+const BAG_NECK = 0.06; // the gathered neck's length, as a share of the bag's
+function bagRadius(t) {
+  const s = Math.max(0, (t - BAG_NECK) / (1 - BAG_NECK));
+  return 0.02 + 0.33 * Math.sin(Math.PI * s ** 0.75) ** 0.6;
+}
 const GLOW = '#8ff7a8';
 // Wound up, the net gathers under its ring: a tenth as wide and under half as long, hanging
 // from the knot where the sling meets.
@@ -63,24 +81,28 @@ class Net {
     this.textScale = 1;   // labels grow on small screens so they stay readable (see Game.resize)
     this.ropePhase = 0;   // rope twists slide as rope pays out
     this.furl = 0;        // 0 open, 1 wound up into a bundle under the ring (between nets)
+    this.pouch = 0;       // 0 open, 1 closed into a bag around its catch
+    this.track = { min: 0, max: 0 }; // the stops the corner can reach, counted from its place
+    this.stopAt = 0;      // the stop it is at
+    this.drawn = null;    // where the corner is drawn while it glides onto its new stop
+    this.arrowGap = 70;   // how far the slide arrows sit from the knob (Game.resize fits it)
     this.tear = 0;        // 0 whole, 1 torn open by a catch a wrong net couldn't hold
     this.burst = null;    // bits of mesh flying off as it tears: { t } seconds
     this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
-  // bottom: the deepest net-coordinate the frame may reach (just above the water)
-  setLevel(level, bottom) {
+  // bottom: the deepest net-coordinate the frame may reach (just above the water); clear: the
+  // net-coordinate x range the corner must keep inside (off the raft, on the stage).
+  setLevel(level, bottom, clear = {}) {
     const shape = parallelogram(level);
     const lowest = Math.max(...shape.map((p) => p.y));
     this.level = level;
     this.solved = shape.map((p) => ({ x: p.x, y: p.y - lowest + bottom }));
     this.movable = corner(level.corner);
     this.target = this.solved[this.movable];
-    this.start = this.solved.map((p) => ({ ...p }));
-    this.start[this.movable] = add(this.target, level.start);
-    this.points = this.start.map((p) => ({ ...p }));
-    const [i, j] = level.along ? side(level.along) : [0, 1];
-    this.along = level.along ? { base: this.target, dir: normalize(sub(this.solved[j], this.solved[i])) } : null;
+    // the track runs through the corner's place along the side or diagonal the level names
+    const [i, j] = side(level.along);
+    this.along = { base: this.target, dir: normalize(sub(this.solved[j], this.solved[i])) };
     const [name, metres] = Object.entries(level.metres || { AB: 6 })[0];
     this.scale = length(this.sideOf(name, this.solved)) / metres;
     this.nearby = Math.min(level.width, level.height) * 0.22;
@@ -88,13 +110,39 @@ class Net {
     this.touched = false;
     this.flash = 0;
     this.glow = null;
+    this.pouch = 0;
+    this.drawn = null;
     const xs = this.solved.map((p) => p.x);
     const ys = this.solved.map((p) => p.y);
-    // the corner may roam around the frame, but not into the water or up to the ring
+    // the corner stays near the frame, out of the water, clear of the ring, the raft and the edge
     this.limits = {
-      left: Math.min(...xs) - level.width * 0.4, right: Math.max(...xs) + level.width * 0.4,
-      top: Math.max(24, Math.min(...ys) - level.height * 0.55), bottom: bottom + 12,
+      left: Math.max(Math.min(...xs) - level.width * 0.4, clear.left ?? -Infinity),
+      right: Math.min(Math.max(...xs) + level.width * 0.4, clear.right ?? Infinity),
+      top: Math.max(24, Math.min(...ys) - level.height * 0.55), bottom: bottom + 34,
     };
+    // the stops it can reach: on from its place each way while the frame stays a simple, roomy
+    // quadrilateral inside the limits
+    this.points = this.solved.map((p) => ({ ...p }));
+    const reach = (step) => {
+      let k = 0;
+      while (Math.abs(k) < TRACK_STOPS && this.fits(this.stop(k + step))) k += step;
+      return k;
+    };
+    this.track = { min: reach(-1), max: reach(1) };
+    this.stopAt = Math.max(this.track.min, Math.min(this.track.max, level.start));
+    this.points[this.movable] = this.stop(this.stopAt);
+    this.start = this.points.map((p) => ({ ...p }));
+  }
+
+  // The point `k` stops from the corner's place along its track.
+  stop(k) {
+    return add(this.along.base, times(this.along.dir, k * STOP));
+  }
+
+  fits(p) {
+    const l = this.limits;
+    if (p.x < l.left || p.x > l.right || p.y < l.top || p.y > l.bottom) return false;
+    return isValidQuad(this.points.map((q, i) => (i === this.movable ? p : q)));
   }
 
   ring() {
@@ -116,12 +164,73 @@ class Net {
     return { x: p.x * (1 - GATHER.x * this.furl), y: KNOT + (p.y - KNOT) * (1 - GATHER.y * this.furl) };
   }
 
-  // The hole the catch tears: low in the middle of the mesh (the frame holds), growing with
-  // the tear.
+  // --- the mesh and the bag ------------------------------------------------------------
+  // The frame as drawn: the moving corner where it is gliding, the rest where they are.
+  framed() {
+    const p = this.points.map((q) => ({ ...q }));
+    if (this.drawn) p[this.movable] = { ...this.drawn };
+    return p;
+  }
+
+  // A point of the mesh by its place in the frame (u across from AD to BC, v down from AB to
+  // DC; outside 0 to 1 for the floats and weights beyond the rope), in net coordinates.
+  // The whole sheet folds into a cinched, rounded pouch as the lifting rope tightens.
+  meshPoint(u, v, p = this.framed()) {
+    const [a, b, c, d] = p;
+    const q = lerp(lerp(a, b, u), lerp(d, c, u), v);
+    if (!this.pouch) return q;
+    // The mouth drawn up into the ring's bottom bar (net 0, KNOT), the broad loaded belly and
+    // rounded toe below it, hanging plumb from the ring whichever way the open frame leaned,
+    // as deep as the open net and its sag. The same surface carries texture, eyelets and fish,
+    // so nothing detaches when the flat net becomes a pouch.
+    const t = Math.max(0, Math.min(1, v));
+    const width = (distance(a, b) + distance(d, c)) / 2;
+    const depth = Math.max(c.y, d.y) + this.sagDepth(p) - midpoint(a, b).y;
+    const radius = width * bagRadius(t);
+    const across = 2 * u - 1;
+    const bag = {
+      x: across * radius,
+      y: KNOT + depth * v + 14 * (1 - across * across) * Math.sin(Math.PI * t),
+    };
+    return lerp(q, bag, this.pouch);
+  }
+
+  // How far the closed bag's belly hangs below the frame's bottom edge.
+  sagDepth(p = this.points) {
+    const h = distance(midpoint(p[0], p[1]), midpoint(p[3], p[2]));
+    return Math.min(POUCH.most, h * POUCH.depth);
+  }
+
+  // A net point's place in the open frame (the inverse of meshPoint with no bag), found by a
+  // few steps of Newton's method; a netted fish keeps it, so it rides down into the bag.
+  uvOf(point) {
+    const [a, b, c, d] = this.points;
+    let u = 0.5;
+    let v = 0.5;
+    for (let n = 0; n < 8; n += 1) {
+      const e = sub(point, lerp(lerp(a, b, u), lerp(d, c, u), v));
+      const du = sub(lerp(b, c, v), lerp(a, d, v));
+      const dv = sub(lerp(d, c, u), lerp(a, b, u));
+      const det = du.x * dv.y - du.y * dv.x;
+      if (!det) break;
+      u += (e.x * dv.y - e.y * dv.x) / det;
+      v += (du.x * e.y - du.y * e.x) / det;
+    }
+    return { u, v };
+  }
+
+  // Where a netted fish hangs: as the net closes it slides down into the belly with the others.
+  catchPoint({ u, v }) {
+    const k = this.pouch;
+    return this.meshPoint(0.5 + (u - 0.5) * (1 - 0.42 * k), v + (0.52 + 0.23 * v - v) * k);
+  }
+
+  // The hole the catch tears: low in the mesh (in the bag's belly, once closed; the frame
+  // holds), growing with the tear.
   tearHole() {
     const [a, b, c, d] = this.points;
-    const centre = lerp(midpoint(midpoint(a, b), midpoint(c, d)), midpoint(c, d), 0.25);
-    const rx = distance(midpoint(a, d), midpoint(b, c)) * 0.34 * this.tear;
+    const centre = this.meshPoint(0.5, this.pouch ? 0.85 : 0.75);
+    const rx = distance(midpoint(a, d), midpoint(b, c)) * 0.34 * (1 - 0.3 * this.pouch) * this.tear;
     const ry = distance(midpoint(a, b), midpoint(d, c)) * 0.3 * this.tear;
     const outline = RAGGED.map((k, i) => {
       const t = (i / RAGGED.length) * TAU;
@@ -148,8 +257,13 @@ class Net {
     return distance(this.points[this.movable], this.target);
   }
 
+  // The net's lowest point: its frame's lower corner, or the bottom of the bag hanging from
+  // the ring.
   bottom() {
-    return Math.max(...this.points.map((p) => p.y));
+    const open = Math.max(...this.points.map((p) => p.y));
+    if (!this.pouch) return open;
+    const bag = KNOT + open + this.sagDepth() - (this.points[0].y + this.points[1].y) / 2;
+    return open + (bag - open) * this.pouch;
   }
 
   // The net's footprint everything in it must share: between the inner ends of its slanted
@@ -164,22 +278,36 @@ class Net {
     return insideConvex(this.toNet(stagePoint), this.points);
   }
 
-  // Moves the corner to a wanted net point: kept inside its limits (and on its line, when the
-  // level has one), never folding the frame into a bow tie or squashing it flat. It goes
-  // exactly where the child puts it; nothing pulls it toward its place.
+  // Moves the corner to the stop on its track nearest a wanted net point. Every stop is alike,
+  // so nothing pulls it toward its place; it glides onto the new stop rather than jumping.
+  // Returns whether it moved.
   moveHandle(want) {
-    const l = this.limits;
-    let p = { x: Math.min(l.right, Math.max(l.left, want.x)), y: Math.min(l.bottom, Math.max(l.top, want.y)) };
-    if (this.along) p = add(this.along.base, times(this.along.dir, dot(sub(p, this.along.base), this.along.dir)));
-    const trial = this.points.map((q, i) => (i === this.movable ? p : q));
-    if (!isValidQuad(trial)) return false;
-    this.points[this.movable] = p;
+    return this.toStop(Math.round(dot(sub(want, this.along.base), this.along.dir) / STOP));
+  }
+
+  // One stop on (or back) along the track: the arrow keys.
+  stepHandle(steps) {
+    return this.toStop(this.stopAt + steps);
+  }
+
+  toStop(k) {
+    const stop = Math.max(this.track.min, Math.min(this.track.max, k));
+    if (stop === this.stopAt) return false;
+    this.drawn = this.cornerDrawn();
+    this.stopAt = stop;
+    this.points[this.movable] = this.stop(stop);
     this.touched = true;
     return true;
   }
 
+  // Where the moving corner is drawn: gliding onto its stop, or on it.
+  cornerDrawn() {
+    return this.drawn ? { ...this.drawn } : { ...this.points[this.movable] };
+  }
+
   setHandle(p) {
     this.points[this.movable] = { x: p.x, y: p.y };
+    this.drawn = null;
   }
 
   // The frame as its solved parallelogram, held still.
@@ -216,53 +344,43 @@ class Net {
     return { o, AO: distance(a, o) / this.scale, OC: distance(o, c) / this.scale, BO: distance(b, o) / this.scale, OD: distance(o, d) / this.scale };
   }
 
+  // --- what the labels show: tenths of a metre and whole degrees ---------------------
+  metresShown(name) {
+    return tenths(this.metres(name));
+  }
+
+  degreesShown(letter) {
+    return Math.round(this.angle(letter));
+  }
+
+  halvesShown() {
+    const h = this.halves();
+    return { AO: tenths(h.AO), OC: tenths(h.OC), BO: tenths(h.BO), OD: tenths(h.OD) };
+  }
+
   pairParallel(sides) {
-    return parallel(this.sideOf(sides[0]), this.sideOf(sides[1]), TOLERANCE.parallel);
+    return parallel(this.sideOf(sides[0]), this.sideOf(sides[1]), EXACT.parallel);
   }
 
-  // The number a measurement tick listens to: it changes as the shown value changes.
-  liveValue() {
-    const L = this.level;
-    const tenths = (m) => Math.round(m * 10);
-    switch (L.type) {
-      case 'length': return tenths(this.metres(L.side));
-      case 'sides': return tenths(this.metres('BC')) * 1000 + tenths(this.metres('CD'));
-      case 'angle': case 'supplementary': return Math.round(this.angle(L.vertex));
-      case 'diagonals': { const h = this.halves(); return tenths(h.AO - h.OC) * 1000 + tenths(h.BO - h.OD); }
-      default: return Number(this.pairParallel(['AB', 'CD'])) + Number(this.pairParallel(['BC', 'AD'])) * 2;
-    }
-  }
-
-  // Whether the frame has the level's property, and where the corner locks if it does.
-  // The exact parallelogram point is A + C = B + D solved for the corner; a parallel-only
-  // level also accepts the corner anywhere along the parallel line, and keeps its length.
+  // Whether the frame has the level's property. The track's stops make it exact: the one stop
+  // that is the corner's place has it, every other stop misses by at least a step the labels
+  // show (tests/geometry.py checks every stop), so the numbers on the net match exactly when
+  // Drop Net will say the frame is right. `snap` is where it locks: that same place.
   check() {
     const L = this.level;
-    const p = this.points;
+    if (!isValidQuad(this.points)) return { ok: false };
     const near = (a, b, tol) => Math.abs(a - b) <= tol;
-    if (!isValidQuad(p)) return { ok: false };
     let ok;
-    let snap = this.target;
     switch (L.type) {
-      case 'parallel': {
-        ok = this.pairParallel(L.sides);
-        if (ok && this.distance() > this.nearby * 2.5) {
-          const mine = L.sides.find((name) => name.includes(L.corner));
-          const other = L.sides.find((name) => name !== mine);
-          const fixed = p[corner(mine.replace(L.corner, ''))];
-          const dir = normalize(this.sideOf(other));
-          snap = add(fixed, times(dir, dot(sub(p[this.movable], fixed), dir)));
-        }
-        break;
-      }
-      case 'length': ok = near(this.metres(L.side), L.metres[L.reference], TOLERANCE.metres); break;
-      case 'sides': ok = near(this.metres('CD'), this.metres('AB'), TOLERANCE.metres) && near(this.metres('BC'), this.metres('AD'), TOLERANCE.metres); break;
-      case 'angle': ok = near(this.angle(L.vertex), L.degrees, TOLERANCE.degrees); break;
-      case 'supplementary': ok = near(this.angle(L.reference) + this.angle(L.vertex), 180, TOLERANCE.degrees); break;
-      case 'diagonals': { const h = this.halves(); ok = near(h.AO, h.OC, TOLERANCE.halves) && near(h.BO, h.OD, TOLERANCE.halves); break; }
-      default: ok = this.pairParallel(['AB', 'CD']) && this.pairParallel(['BC', 'AD']);
+      case 'parallel': ok = this.pairParallel(L.sides); break;
+      case 'length': ok = near(this.metres(L.side), L.metres[L.reference], EXACT.metres); break;
+      case 'sides': ok = near(this.metres('CD'), L.metres.AB, EXACT.metres) && near(this.metres('BC'), this.metres('AD'), EXACT.metres); break;
+      case 'angle': ok = near(this.angle(L.vertex), L.degrees, EXACT.degrees); break;
+      case 'supplementary': ok = near(L.degrees + this.angle(L.vertex), 180, EXACT.degrees); break;
+      case 'diagonals': { const h = this.halves(); ok = near(h.AO, h.OC, EXACT.metres) && near(h.BO, h.OD, EXACT.metres); break; }
+      default: ok = near(this.metres('AB'), this.metres('CD'), EXACT.metres) && near(this.metres('BC'), this.metres('AD'), EXACT.metres);
     }
-    return { ok, snap };
+    return { ok, snap: this.target };
   }
 
   // What lights up after a correct check, step by step.
@@ -293,13 +411,19 @@ class Net {
     if (this.hintPulse > 0) this.hintPulse = Math.max(0, this.hintPulse - dt);
     if (this.glow && (this.glow.t += dt) >= this.glow.steps.length * this.glow.each) this.glow = null;
     if (this.burst && (this.burst.t += dt) > 0.7) this.burst = null;
+    // the moving corner glides onto its stop in a few frames: a quick click, not a jump
+    if (this.drawn) {
+      const p = this.points[this.movable];
+      this.drawn = this.reduced ? null : lerp(this.drawn, p, Math.min(1, dt * 30));
+      if (this.drawn && distance(this.drawn, p) < 0.3) this.drawn = null;
+    }
   }
 
   // --- drawing --------------------------------------------------------------------
   draw(ctx, { waterline, pulley }) {
     if (!this.visible) return;
     const r = this.ring();
-    const reach = Math.max(...this.points.map((p) => length(p))) + 80;
+    const reach = Math.max(...this.points.map((p) => length(p))) + 80 + this.sagDepth() * this.pouch;
     const top = Math.min(pulley.hub.y - 30, r.y - reach);
     const bottom = r.y + reach;
     if (bottom < waterline) {
@@ -324,7 +448,8 @@ class Net {
   }
 
   drawAll(ctx, ring, pulley, wet) {
-    const corners = this.points.map((p) => this.toStage(p));
+    const frame = this.framed();
+    const corners = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([u, v]) => this.toStage(this.meshPoint(u, v, frame)));
     const showing = !this.furl && (!this.locked || this.glow);
     ctx.save();
     ctx.globalAlpha = this.alpha * (wet ? 0.9 : 1);
@@ -337,9 +462,18 @@ class Net {
     // rope, tiled.
     drawPulleyWrap(ctx, pulley.hub, pulley.exit, this.ropePhase);
     drawRope(ctx, pulley.exit, { x: ring.x, y: ring.y + 6 }, ROPE_WIDTH, this.ropePhase);
+    // the sling's legs come down to the top corners; closing into a bag, the mouth rises into
+    // the ring and they shorten away to nothing
     const knot = { x: ring.x, y: ring.y + KNOT };
     drawRope(ctx, knot, corners[0], 5);
     drawRope(ctx, knot, corners[1], 5);
+    ctx.filter = 'none';
+
+    this.drawBagVolume(ctx, frame, wet);
+    this.drawGenerated(ctx, wet, frame);
+    // the ring over the mesh, so a closed bag's gathered mouth goes up into it and hangs from
+    // its bar (an open net hangs well below it)
+    if (wet) ctx.filter = 'saturate(0.6) brightness(0.85)';
     drawRing(ctx, ring.x, ring.y);
     // the turns stay on the bar, so their ends look tucked round behind it
     ctx.save();
@@ -351,8 +485,7 @@ class Net {
     }
     ctx.restore();
     ctx.filter = 'none';
-
-    this.drawGenerated(ctx, wet);
+    if (!this.locked && !this.furl) this.drawArrows(ctx, corners[this.movable]);
     if (this.flash > 0) {
       ctx.save();
       ctx.globalAlpha *= this.flash * 0.7;
@@ -367,7 +500,7 @@ class Net {
     if (this.furl < 1) {
       // the eyelets fold away into the bundle as the net winds up
       ctx.save();
-      ctx.globalAlpha *= 1 - this.furl;
+      ctx.globalAlpha *= (1 - this.furl) * (1 - this.pouch);
       this.drawCorners(ctx, corners, wet);
       ctx.restore();
     }
@@ -375,24 +508,117 @@ class Net {
     ctx.restore();
   }
 
+  // Transparent depth over the catch, beneath the front mesh. Curved folds and a
+  // bound neck give the bag volume without an opaque sticker hiding the fish.
+  drawBagVolume(ctx, frame, wet) {
+    if (this.pouch <= 0) return;
+    ctx.save();
+    ctx.globalAlpha *= this.pouch * (1 - this.furl);
+    const point = (u, v) => this.toStage(this.meshPoint(u, v, frame));
+    // from below the folded-away floats down
+    const below = (k) => NECK + (1 - NECK) * k;
+    ctx.beginPath();
+    for (let i = 0; i <= 32; i += 1) {
+      const q = point(0, below(i / 32));
+      if (!i) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y);
+    }
+    for (let i = 32; i >= 0; i -= 1) {
+      const q = point(1, below(i / 32));
+      ctx.lineTo(q.x, q.y);
+    }
+    ctx.closePath();
+    // Keep the tear visibly open through every layer.
+    if (this.tear) {
+      this.tearHole().outline.forEach((q, i) => {
+        const p = this.toStage(q);
+        if (i) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y);
+      });
+      ctx.closePath();
+    }
+    ctx.clip('evenodd');
+    const left = point(0, 0.5), right = point(1, 0.5);
+    const shade = ctx.createLinearGradient(left.x, left.y, right.x, right.y);
+    shade.addColorStop(0, 'rgba(36, 48, 32, .32)');
+    shade.addColorStop(0.3, 'rgba(233, 211, 144, .04)');
+    shade.addColorStop(0.58, 'rgba(255, 238, 176, .10)');
+    shade.addColorStop(1, 'rgba(30, 49, 36, .38)');
+    ctx.fillStyle = shade;
+    ctx.fillRect(0, 0, PopoGame.STAGE_W, PopoGame.STAGE_H);
+    for (const u of [0.12, 0.27, 0.73, 0.88]) {
+      ctx.beginPath();
+      for (let i = 0; i <= 24; i += 1) {
+        const q = point(u, below(i / 24));
+        if (!i) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y);
+      }
+      ctx.strokeStyle = wet ? 'rgba(35, 58, 49, .18)' : 'rgba(78, 57, 26, .18)';
+      ctx.lineWidth = 5;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255, 226, 158, .30)';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Two little arrows beside the knob show which ways it slides along its track (each fades out
+  // at the end of the track); the track itself isn't drawn.
+  drawArrows(ctx, knob) {
+    const from = this.toStage(this.stop(this.track.min));
+    const to = this.toStage(this.stop(this.track.max));
+    const k = this.textScale;
+    ctx.save();
+    ctx.lineCap = 'round';
+    const dir = normalize(sub(to, from));
+    const nudge = this.reduced ? 0 : Math.sin(this.time * 4) * 3;
+    for (const [sign, open] of [[1, this.stopAt < this.track.max], [-1, this.stopAt > this.track.min]]) {
+      if (!open) continue;
+      const at = add(knob, times(dir, sign * (this.arrowGap + nudge)));
+      const tip = add(at, times(dir, sign * 9 * k));
+      const back = times(dir, -sign * 9 * k);
+      const across = { x: -dir.y * 10 * k, y: dir.x * 10 * k };
+      ctx.beginPath();
+      ctx.moveTo(at.x + back.x + across.x, at.y + back.y + across.y);
+      ctx.lineTo(tip.x, tip.y);
+      ctx.lineTo(at.x + back.x - across.x, at.y + back.y - across.y);
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 7 * k;
+      ctx.strokeStyle = INK;
+      ctx.stroke();
+      ctx.lineWidth = 3.5 * k;
+      ctx.strokeStyle = '#ffd84a';
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Where the two slide arrows sit beside the knob at `knob` (a stage point), each null at its
+  // end of the track; their tap targets go there (Game.placeHandle).
+  arrowPoints(knob) {
+    if (this.locked || this.furl) return { back: null, on: null };
+    const dir = normalize(sub(this.toStage(this.stop(this.track.max)), this.toStage(this.stop(this.track.min))));
+    const at = (sign) => add(knob, times(dir, sign * this.arrowGap));
+    return { back: this.stopAt > this.track.min ? at(-1) : null, on: this.stopAt < this.track.max ? at(1) : null };
+  }
+
   // The generated net texture (assets/generated/net.png) warped onto the frame: the rope
   // frame of the picture lands on the corners and the floats and weights outside it come
-  // along. Drawn in net coordinates and cached per shape, so bobbing, swinging and lowering
-  // never rebuild it; only a drag does.
-  drawGenerated(ctx, wet) {
-    const key = JSON.stringify(this.points);
+  // along; closed into a bag, the mesh follows meshPoint. Drawn in net coordinates and cached
+  // per shape, so bobbing, swinging and lowering never rebuild it; only a drag or the bag
+  // closing does.
+  drawGenerated(ctx, wet, frame) {
+    const key = JSON.stringify(frame) + this.pouch;
     if (this.textureKey !== key) {
       this.textureKey = key;
       const img = PopoGame.assets.netPolished;
-      const p = this.points;
-      const map = (u, v) => lerp(lerp(p[0], p[1], u), lerp(p[3], p[2], u), v);
+      const map = (u, v) => this.meshPoint(u, v, frame);
       // registration is on the rope centreline; the outer floats and weights come along
       const source = { x: 63, y: 110, w: 1645, h: 630 };
       const u0 = -source.x / source.w;
       const u1 = (img.width - source.x) / source.w;
       const v0 = -source.y / source.h;
       const v1 = (img.height - source.y) / source.h;
-      const bounds = [map(u0, v0), map(u1, v0), map(u1, v1), map(u0, v1)];
+      const bounds = [];
+      for (let y = 0; y <= 18; y += 1) for (let x = 0; x <= 12; x += 1) bounds.push(map(u0 + (u1 - u0) * x / 12, v0 + (v1 - v0) * y / 18));
       const left = Math.floor(Math.min(...bounds.map((q) => q.x))) - 3;
       const top = Math.floor(Math.min(...bounds.map((q) => q.y))) - 3;
       const width = Math.ceil(Math.max(...bounds.map((q) => q.x)) - left) + 3;
@@ -433,12 +659,12 @@ class Net {
         g.drawImage(img, 0, 0);
         g.restore();
       };
-      for (let y = 0; y < 6; y += 1) {
+      for (let y = 0; y < 18; y += 1) {
         for (let x = 0; x < 12; x += 1) {
           const u = u0 + (u1 - u0) * x / 12;
-          const v = v0 + (v1 - v0) * y / 6;
+          const v = v0 + (v1 - v0) * y / 18;
           const r = u0 + (u1 - u0) * (x + 1) / 12;
-          const b = v0 + (v1 - v0) * (y + 1) / 6;
+          const b = v0 + (v1 - v0) * (y + 1) / 18;
           triangle([u, v], [r, v], [r, b]);
           triangle([u, v], [r, b], [u, b]);
         }
@@ -458,7 +684,7 @@ class Net {
     }
     if (wet) ctx.filter = 'saturate(.7) brightness(.88)';
     if (!this.tear) {
-      ctx.drawImage(this.textureCanvas, b.left, b.top, b.width, b.height);
+      this.paintMesh(ctx, frame, b);
       ctx.restore();
       return;
     }
@@ -471,7 +697,7 @@ class Net {
     hole.outline.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
     ctx.closePath();
     ctx.clip('evenodd');
-    ctx.drawImage(this.textureCanvas, b.left, b.top, b.width, b.height);
+    this.paintMesh(ctx, frame, b);
     ctx.restore();
     // frayed ends all round the edge, drooping, each dark-edged so it reads over sea and sky
     ctx.lineCap = 'round';
@@ -511,6 +737,44 @@ class Net {
     ctx.restore();
   }
 
+  // The warped texture, in net coordinates. Closing into a bag, the floats along the top rope
+  // would be squeezed into the gathered mouth and fan out above it like spikes, so they fold
+  // away as it closes: the mesh below them is drawn whole, the band above fades out, and the
+  // mouth goes up into the ring.
+  paintMesh(ctx, frame, b) {
+    const image = () => ctx.drawImage(this.textureCanvas, b.left, b.top, b.width, b.height);
+    if (!this.pouch) { image(); return; }
+    const neck = [];
+    for (let i = 0; i <= 12; i += 1) neck.push(this.meshPoint(i / 12, NECK, frame));
+    const right = b.left + b.width;
+    const bottom = b.top + b.height;
+    const mouth = () => {
+      ctx.moveTo(b.left, neck[0].y);
+      neck.forEach((q) => ctx.lineTo(q.x, q.y));
+      ctx.lineTo(right, neck[neck.length - 1].y);
+    };
+    ctx.save();
+    ctx.beginPath();
+    mouth();
+    ctx.lineTo(right, bottom);
+    ctx.lineTo(b.left, bottom);
+    ctx.closePath();
+    ctx.clip();
+    image();
+    ctx.restore();
+    if (this.pouch >= 1) return;
+    ctx.save();
+    ctx.globalAlpha *= (1 - this.pouch) ** 2;
+    ctx.beginPath();
+    mouth();
+    ctx.lineTo(right, b.top);
+    ctx.lineTo(b.left, b.top);
+    ctx.closePath();
+    ctx.clip();
+    image();
+    ctx.restore();
+  }
+
   framePath(ctx, c) {
     ctx.beginPath();
     c.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
@@ -522,8 +786,8 @@ class Net {
   drawMeasurements(ctx, c) {
     const L = this.level;
     if (!L) return;
-    const m = (name) => `${this.metres(name).toFixed(1)} m`;
-    const deg = (letter) => `${Math.round(this.angle(letter))}°`;
+    const m = (name) => `${this.metresShown(name).toFixed(1)} m`;
+    const deg = (letter) => `${this.degreesShown(letter)}°`;
     switch (L.type) {
       case 'parallel':
         this.drawSideHighlight(ctx, c, L.sides);
@@ -564,12 +828,13 @@ class Net {
     }
   }
 
-  // A side's label sits just inside its midpoint, clear of the water, the sling and the mast.
+  // A side's label sits just inside its midpoint, clear of the water, the sling and the mast;
+  // on a side the moving corner pulls, it sits a little toward the fixed end, clear of the knob.
   drawLength(ctx, c, name, value, live = false) {
     const [i, j] = side(name);
-    const mid = midpoint(c[i], c[j]);
+    const mid = lerp(c[i], c[j], this.clearOfKnob(i, j));
     const centre = midpoint(midpoint(c[0], c[1]), midpoint(c[2], c[3]));
-    const at = add(mid, times(normalize(sub(centre, mid)), 30));
+    const at = add(mid, times(normalize(sub(centre, mid)), 30 * this.textScale));
     this.text(ctx, `${name} ${value}`, at.x, at.y, live ? 26 : 22, live ? '#ffd84a' : '#fff', live);
   }
 
@@ -612,6 +877,13 @@ class Net {
       }
     }
     ctx.restore();
+  }
+
+  // Where along side i-j its label sits: the middle, or toward the fixed end when the moving
+  // corner is one end of it.
+  clearOfKnob(i, j) {
+    if (this.locked) return 0.5;
+    return j === this.movable ? 0.4 : i === this.movable ? 0.6 : 0.5;
   }
 
   // A small interior arc at a corner with its degrees along the bisector.
@@ -669,18 +941,23 @@ class Net {
     ctx.strokeStyle = '#4a2c0f';
     ctx.stroke();
     ctx.restore();
-    this.text(ctx, 'O', o.x + 18, o.y - 16, 22, '#fff');
+    const k = this.textScale;
+    // O sits in the gap between the two upper halves' labels, just under the crossing
+    this.text(ctx, 'O', o.x, o.y + 24 * k, 22, '#fff');
     if (!labels) return;
-    const h = this.halves();
-    const put = (from, to, name, value, sign) => {
-      const mid = midpoint(from, to);
+    const h = this.halvesShown();
+    // each half's label sits beside its middle (toward O on the moving corner's half, clear of
+    // the knob), out on the side away from O's other halves
+    const put = (from, to, name, value, sign, along = 0.5) => {
+      const mid = lerp(from, to, along);
       const u = normalize(sub(to, from));
-      this.text(ctx, `${name} ${value.toFixed(1)} m`, mid.x - u.y * 30 * sign, mid.y + u.x * 30 * sign, 22, '#ffd84a', true);
+      this.text(ctx, `${name} ${value.toFixed(1)} m`, mid.x - u.y * 30 * k * sign, mid.y + u.x * 30 * k * sign, 22, '#ffd84a', true);
     };
-    put(a, o, 'AO', h.AO, 1);
-    put(o, cc, 'OC', h.OC, 1);
-    put(b, o, 'BO', h.BO, -1);
-    put(o, d, 'OD', h.OD, -1);
+    const toward = (end) => (end === this.movable && !this.locked ? 0.38 : 0.5);
+    put(a, o, 'AO', h.AO, 1, 1 - toward(0));
+    put(o, cc, 'OC', h.OC, 1, toward(2));
+    put(b, o, 'BO', h.BO, -1, 1 - toward(1));
+    put(o, d, 'OD', h.OD, -1, toward(3));
   }
 
   // The property highlight: sides, angles or diagonal halves light up, one step at a time.
@@ -706,7 +983,7 @@ class Net {
       ctx.stroke();
     }
     if (step.angles) {
-      for (const letter of step.angles) this.drawAngle(ctx, c, letter, `${Math.round(this.angle(letter))}°`, false, 'rgba(143, 247, 168, 0.55)');
+      for (const letter of step.angles) this.drawAngle(ctx, c, letter, `${this.degreesShown(letter)}°`, false, 'rgba(143, 247, 168, 0.55)');
     }
     if (step.halves || step.diagonals) {
       const [a, b, cc, d] = c;

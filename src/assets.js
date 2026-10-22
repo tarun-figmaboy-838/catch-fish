@@ -39,14 +39,17 @@ function preloadBackground(index) {
   return pending.get(index);
 }
 
+// The generated art (assets/generated/, used whole) as the WebP copies tools/build-assets.py
+// makes of it: the same pictures, a fifth of the download.
+const generated = (name) => loadImage(`assets/generated-web/${name}.webp`);
+
 async function loadCoreAssets() {
-  const [popo, operating, winch, rope, connector, net, rowCycle, naturalFish, bg0, props, title, play] = await Promise.all([
-    loadImage('assets/generated/popo.png'),
-    loadImage('assets/generated/popo-operating.png'),
-    loadImage('assets/generated/winch-arched.png'),
-    loadImage('assets/generated/rope.png'),
-    loadImage('assets/generated/rope-connector.png'),
-    loadImage('assets/generated/net.png'),
+  const [operating, winch, rope, connector, net, rowCycle, naturalFish, bg0, props, title, play] = await Promise.all([
+    generated('popo-operating'),
+    generated('winch-arched'),
+    generated('rope'),
+    generated('rope-connector'),
+    generated('net'),
     loadImage('assets/sprites/popo-row-cycle.webp'),
     loadImage('assets/sprites/fish-natural.webp'),
     preloadBackground(0),
@@ -54,7 +57,6 @@ async function loadCoreAssets() {
     loadImage(TITLE),
     loadImage(PLAY),
   ]);
-  assets.popoPolished = popo;
   assets.popoOperating = operating;
   assets.winchPolished = winch;
   assets.rope = rope;
@@ -66,6 +68,9 @@ async function loadCoreAssets() {
   assets.props = props;
   assets.naturalFish = { img: naturalFish, boxes: FISH_NATURAL_ATLAS.boxes, scale: FISH_NATURAL_ATLAS.scale };
   preloadBackground(1);
+  // the pause and final cards' panel (a CSS background) loads now, in the background, so the
+  // first pause never shows a card without its frame
+  loadImage('assets/generated/panel.png').catch(() => {});
   return bg0;
 }
 

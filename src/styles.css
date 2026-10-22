@@ -550,3 +550,23 @@ html, body {
 .hud-top { grid-template-columns: minmax(96px, 1fr) minmax(0, 3fr) minmax(96px, 1fr); }
 .instruction { grid-column: 2; grid-row: 1; }
 .hud-buttons { grid-column: 3; grid-row: 1; }
+
+/* ---------- text delivery (animation, Game.deliver): the instruction plate and the final
+   card's lessons show their words as they are said, on one line. The words are laid out hidden
+   first, so the plate keeps its size; each pops in, a stressed one boings, and the plate
+   bounces as each new sentence starts. The plate's own look is unchanged. ---------- */
+/* the slide arrows beside the net's knob: invisible tap targets over the drawn arrows */
+.step { position: absolute; left: 0; top: 0; width: 44px; height: 44px; margin: -22px 0 0 -22px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; pointer-events: auto; touch-action: manipulation; }
+.step[hidden] { display: none; }
+.step:focus { outline: none; }
+.step:focus-visible { box-shadow: 0 0 0 0.3em rgba(255, 255, 255, 0.9), 0 0 0 0.6em var(--amber); }
+#instruction-text { white-space: nowrap; } /* one line, never two (UI.fitInstruction fits it) */
+.words .w { display: inline-block; visibility: hidden; }
+.words .w.in { visibility: visible; animation: word-in 0.32s cubic-bezier(0.2, 1.8, 0.4, 1); }
+.words .w.em.in { animation: word-boing 0.55s cubic-bezier(0.2, 1.8, 0.4, 1); }
+.instruction.bump, .card.celebrate p.bump { animation: line-bump 0.34s ease-out; }
+@keyframes line-bump { 45% { transform: scale(1.06, 0.95); } }
+/* ∠ is drawn (Fredoka has no angle sign), the height of a capital, in the text's colour */
+.ang { position: relative; display: inline-block; width: 0.66em; height: 0.66em; margin-right: 0.07em; vertical-align: 0; }
+.ang svg { display: block; width: 100%; height: 100%; overflow: visible; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ang-sign { position: absolute; inset: 0; opacity: 0; overflow: hidden; font-size: 0.5em; }

@@ -20,6 +20,8 @@
 
       <div id="hits" class="hits">
         <button id="handle" class="handle" type="button" aria-label="Net corner. Drag it, or move it with the arrow keys and press Enter." hidden></button>
+        <button id="step-back" class="step" type="button" aria-label="Slide the corner back one stop" hidden></button>
+        <button id="step-on" class="step" type="button" aria-label="Slide the corner on one stop" hidden></button>
       </div>
       <img id="hand" class="hand" src="assets/sprites/hint-hand.webp" alt="" hidden aria-hidden="true">
 
@@ -29,7 +31,8 @@
       <div id="hud" class="hud" hidden>
         <div class="hud-top">
           <div id="instruction" class="instruction" role="status" aria-live="polite">
-            <span id="instruction-text"></span>
+            <span id="instruction-text" class="words" aria-hidden="true"></span>
+            <span id="instruction-say" class="sr-only"></span>
           </div>
           <div class="hud-buttons">
             <button id="btn-sound" class="icon-btn" type="button" aria-label="Sound on" aria-pressed="true">
@@ -65,7 +68,7 @@
             <circle cx="104" cy="70" r="5" fill="#ffd84a" stroke="#4a2c0f" stroke-width="2.5"/><circle cx="10" cy="70" r="5" fill="#ffd84a" stroke="#4a2c0f" stroke-width="2.5"/>
           </svg>
           <h2 id="complete-title"></h2>
-          <p id="complete-lesson"></p>
+          <p id="complete-lesson" class="words"></p>
           <button id="btn-again" class="btn primary" type="button">Play Again</button>
         </div>
       </section>
