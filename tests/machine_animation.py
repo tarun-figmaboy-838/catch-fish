@@ -36,7 +36,7 @@ with sync_playwright() as p:
       return {levels,frames,reverse,error};
     }''')
     for lv in results['levels']:
-        assert lv['targetFits'] and lv['left']>=lv['raftRight']+50 and lv['top']>=24 and lv['right']<=1624, lv
+        assert lv['targetFits'] and lv['left']>=lv['raftRight']+40 and lv['top']>=24 and lv['right']<=1624, lv
     assert results['frames']==[0,1,2,3,0,1,2,3],results
     assert results['reverse']==[3,2,1,0,3,2,1,0],results
     assert results['error']<0.001,results

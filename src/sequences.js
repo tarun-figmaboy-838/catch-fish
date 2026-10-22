@@ -317,11 +317,14 @@ async function dropNet(game) {
       game.instruct('');
       audio.stopVoice();
     }
+    const justLocked = right && !game.netRight;
     game.netRight = right;
     state.phase = PHASE.NET_LOWERING;
     net.locked = true;
     popo.squash = 0.07; // Popo takes hold of the wheel
-    await clock.wait(200, token);
+    // a right frame holds a moment, clicked into place and glowing as its praise begins, so the
+    // child sees what was right before the net goes down
+    await clock.wait(justLocked ? (reduced ? 300 : 650) : 200, token);
 
     const depth = game.catchDepth();
     // Update payout and its dependent geometry together, before splash/capture checks.
@@ -414,6 +417,7 @@ async function dropNet(game) {
     }
     state.phase = PHASE.LEVEL_COMPLETE;
     state.caught += caught.length;
+    ui.setNets(state.level + 1, state.level + 1);
     popo.react('laugh', 1.6);
     audio.play('catch');
     const ring = net.ring();
@@ -556,6 +560,8 @@ async function collectFish(game, fish, token) {
       const bucket = popo.bucketPoint();
       fx.sparkle(bucket.x, bucket.y-10, 8);
       audio.play('collect');
+      game.landed += 1;
+      game.ui.setCatch(game.landed, true);
     });
   }));
   await Promise.all(flights);
@@ -695,6 +701,7 @@ async function theEnd(game, token) {
   game.announceComplete();
   ending.titleAt = ending.t;
   audio.play('tada');
+  ui.setCatch(game.landed, true);
   await clock.wait(reduced ? 600 : 1300, token);
   ui.showAgain(true);
   audio.play('bloop');

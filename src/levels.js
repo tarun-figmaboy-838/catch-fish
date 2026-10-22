@@ -35,37 +35,37 @@ const LEVELS = [
     praise: 'Nice! Both pairs of opposite sides are parallel.',
     hint: 'Look at BC and AD. Do they lean the same way?' },
   { title: 'Match the Opposite Side', type: 'length', side: 'CD', reference: 'AB', metres: { AB: 6 }, corner: 'C', along: 'DC',
-    width: 420, height: 200, lean: 50, start: -5, // CD starts at 4.6 m
+    width: 420, height: 200, lean: 50, start: -6, // CD starts at 4.3 m
     location: 1, fish: 4, hintDelay: 5,
     prompt: 'AB = *6 m*. Make CD = *6 m*.',
     praise: 'Great! Opposite sides can be equal.',
     hint: 'Compare the two opposite side lengths.' },
   { title: 'Use Both Side Properties', type: 'sides', metres: { AB: 8, AD: 5 }, corner: 'C', along: 'AC',
-    width: 380, height: 230, lean: 60, start: -6, // slides along the diagonal, toward A
+    width: 380, height: 230, lean: 60, start: -7, // slides along the diagonal, toward A
     location: 1, fish: 5, hintDelay: 6,
     prompt: 'AB = *8 m* and AD = *5 m*. Make the net a parallelogram.',
     praise: 'Perfect! Opposite sides are equal and parallel.',
     hint: 'CD should match AB, and BC should match AD.' },
   { title: 'Match the Opposite Angle', type: 'angle', vertex: 'C', reference: 'A', degrees: 70, corner: 'C', along: 'DC',
-    width: 420, height: 210, angleA: 70, start: -5, // angle C starts near 96 degrees
+    width: 420, height: 210, angleA: 70, start: -7, // angle C starts near 101 degrees
     location: 2, fish: 5, hintDelay: 6,
     prompt: '∠A = *70°*. Make ∠C = *70°*.',
     praise: 'Yes! Opposite angles are equal.',
     hint: 'Compare angle A with angle C.' },
   { title: 'Make the Adjacent Angle', type: 'supplementary', vertex: 'B', reference: 'A', degrees: 65, corner: 'B', along: 'AB',
-    width: 420, height: 210, angleA: 65, start: 5, // angle B starts near 89 degrees
+    width: 420, height: 210, angleA: 65, start: 8, // angle B starts near 80 degrees
     location: 2, fish: 6, hintDelay: 6,
     prompt: '∠A = *65°*. Make ∠B supplementary to ∠A.',
     praise: 'Great! Adjacent angles add to 180°.',
     hint: 'Adjacent angles should add to 180°.' },
-  { title: 'Balance the Diagonals', type: 'diagonals', metres: { AB: 6 }, corner: 'C', along: 'AC',
-    width: 440, height: 210, lean: 50, start: -5, // along AC itself, so the diagonals always cross at BD's middle
+  { title: 'Balance the Diagonals', type: 'diagonals', metres: { AB: 6 }, corner: 'C', along: 'DC',
+    width: 440, height: 210, lean: 50, start: -8, // along DC, so both diagonals' halves change as it slides
     location: 3, fish: 7, hintDelay: 7,
     prompt: 'Make the diagonals *bisect* each other.',
     praise: 'Great! The diagonals bisect each other.',
     hint: 'Check both halves of each diagonal.' },
   { title: 'Final Catch', type: 'parallelogram', metres: { AB: 6 }, corner: 'D', along: 'BD',
-    width: 400, height: 210, lean: 30, rotate: -7, start: -5, // slides along the diagonal, toward B
+    width: 400, height: 210, lean: 30, rotate: -7, start: -9, // slides along the diagonal, toward B
     location: 3, fish: 9, rare: true, hintDelay: 9,
     prompt: 'Make this net a *parallelogram*.',
     praise: 'You made a parallelogram!',

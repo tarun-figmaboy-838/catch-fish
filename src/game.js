@@ -82,6 +82,7 @@ class Game {
     this.delivery = null;  // the words of the instruction plate still to appear
     this.netRight = false; // the frame has been proven right this level; only the timing is left
     this.ending = null;    // the end screen: its circle, the scene's pan, The End (see theEnd)
+    this.landed = 0;       // fish in the bucket this game (the counter at the top left)
     this.handShown = false;
     this.poof = null;
     this.ambient = [];
@@ -177,6 +178,9 @@ class Game {
     this.drag = null;
     this.netRight = false;
     this.ending = null;
+    this.landed = 0;
+    this.ui.setCatch(0);
+    this.ui.setNets(0, 0);
     this.endLine();
     this.instruct('');
     // a restart from the pause card must hand back the HUD and the net's corner
@@ -232,7 +236,7 @@ class Game {
     const before = net.points.map((p) => ({ ...p }));
     // the corner's track stays clear of the raft and inside the stage
     net.setLevel(level, this.waterline - NET_CLEARANCE - this.netRest.y, {
-      left: this.popo.raftEnds().right + 60 - this.netRest.x, right: STAGE_W - 48 - this.netRest.x,
+      left: this.popo.raftEnds().right + 44 - this.netRest.x, right: STAGE_W - 48 - this.netRest.x,
     });
     const span = net.innerSpan();
     const top = this.waterline + SCHOOL_TOP;
@@ -272,6 +276,7 @@ class Game {
     state.misses = 0;
     this.net.locked = false;
     this.netRight = false;
+    this.ui.setNets(state.level, state.level);
     this.lastTick = { value: this.net.stopAt, at: 0 };
     this.popo.idle();
     this.ui.showHandle(true);
@@ -603,11 +608,14 @@ class Game {
     this.hintShown = true;
   }
 
+  // The hand shows how the corner slides: two stops the right way along its track, never all the
+  // way to its place.
   advanceHand(dt) {
     const h = this.hint;
     h.t += dt;
-    const from = this.net.handle();
-    const to = this.net.toStage(this.net.target);
+    const net = this.net;
+    const from = net.handle();
+    const to = net.toStage(net.stop(net.stopAt - Math.sign(net.stopAt) * Math.min(2, Math.abs(net.stopAt))));
     const k = ease.inOut(Math.min(1, Math.max(0, (h.t - 0.5) / 1.2)));
     this.ui.moveHand(from.x + (to.x - from.x) * k + 6, from.y + (to.y - from.y) * k + 6);
     if (h.t > 2.1) this.ui.fadeHand();

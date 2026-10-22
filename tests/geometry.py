@@ -31,7 +31,7 @@ CHECKS = '''() => {
     const distance = geo.distance(start[net.movable], net.target) / net.nearby;
     // every stop on the track: does Drop Net pass, and do the numbers on the net match?
     const shown = {
-      parallel: () => net.pairParallel(level.sides),
+      parallel: () => net.slopeShown(level.sides[0]) === net.slopeShown(level.sides[1]),
       length: () => net.metresShown(level.side).toFixed(1) === level.metres[level.reference].toFixed(1),
       sides: () => net.metresShown('CD').toFixed(1) === level.metres.AB.toFixed(1) && net.metresShown('BC').toFixed(1) === level.metres.AD.toFixed(1),
       angle: () => net.degreesShown(level.vertex) === level.degrees,

@@ -76,13 +76,16 @@ never change, so a year-long cache would keep old art against new code.
 - **Stage.** The world is a fixed 1672x941 logical space scaled to the viewport. The paintings
   have their waterline 41% down, so they are drawn `SCENE_SHIFT` lower (the water pass carries
   the sky on above them), putting the water at about 60% and leaving the sky to the net.
-- **Teaching the shape.** Every level shows only what it is about: parallel ticks that turn
-  green when a pair lines up, side lengths in metres (references fixed, the rest live), angle
-  arcs with degrees, or the diagonals with O and their four halves; vertex labels A–D are always
-  there, and two little arrows beside the knob show which ways the corner slides (a tap on
-  one moves it a stop; the track itself isn't drawn). Drop
-  Net looks the same whether the frame is right or not; pressed with the property, it locks
-  with a click and lights the property with its praise while the net goes straight down (the
+- **Teaching the shape.** Every level shows only what it is about: on the parallel levels the
+  pair's parallel marks and each side's slope in degrees (parallel exactly when the slopes
+  match; nothing lights up by itself), side lengths in metres (references fixed, the rest
+  live), angle arcs with degrees, the diagonals with O and their four halves, or on the last net
+  all of it (sides, opposite angles, diagonals), as its hint says; vertex labels A–D are always
+  there, and two little arrows beside the knob show which ways the corner slides (a tap on one
+  moves it a stop; the track itself isn't drawn). The labels are laid out together so none
+  covers another on any screen. The answer lies further from the start level by level (5 to 9
+  stops). Drop Net looks the same whether the frame is right or not; pressed with the property,
+  it locks with a click, holds a moment glowing as its praise begins, then goes down (the
   child dropped it then, for the fish under it). Pressed with a wrong frame, the net goes down
   all the same: the netted fish thrash until the bag tears, then wriggle out and dive back
   into the sea; the level's hint shows while Popo winds the net up and lets it down (mended,
@@ -97,10 +100,13 @@ never change, so a year-long cache would keep old art against new code.
   whole new school (the first, the golden one) rushes in, its lanes fast for a moment, so the
   sea fills at once.
 - **Hints.** Left alone, the first hint reads the prompt again, each word bouncing in place as
-  it is said; on the first net
-  the hand also shows the drag, once; later hints nudge the plate and swell the measurements
+  it is said; on the first net the hand also shows how the corner slides, two stops the right
+  way (never all the way to its place), once; later hints nudge the plate and swell the measurements
   (the supplementary level shows 65° + ? = 180° once the child starts), so the game teaches
   rather than solves itself. No hint says whether the net is right; Drop Net does.
+- **The catch so far.** Top left, on the narration plate's navy and gold: a fish and the number
+  caught this game, bouncing as each fish lands in the bucket, and a dot for each net (done
+  ones filled, the one being fished ringed).
 - **HUD.** Narration follows the Fishing Frenzy games: the instruction (prompt, praise, hint)
   and the narrator's lines sit on one translucent navy plate with a faint gold rim, white
   text and the key word in gold, fitted to the words. The instruction is always one line (a
@@ -132,10 +138,13 @@ never change, so a year-long cache would keep old art against new code.
 - **Fish** (`src/fish.js`): the natural cartoon fish of `asset/fish-natural-*.png`, drawn in
   vertical strips that ripple head to tail so they visibly swim. The school swims in two lanes
   across the water the lowered net reaches, a fish-height or more apart and going opposite
-  ways, so no two fish ever overlap or meet head on; in a lane each fish keeps its own loose,
-  slowly changing spacing and depth (the `Sea` eases its speed to hold it), so none stops,
-  turns back or catches up, and they loop round just out of sight at the ends and float gently.
-  Newcomers wait out of sight at a lane's start and swim in when there's room. The pace rises
+  ways, so no two fish ever overlap or meet head on; in a lane they go about in shoals of three
+  or four, nose to tail at their own depths, with open water between, so a net timed for a
+  shoal nets the lot and one dropped over open water catches little or nothing. Each fish
+  eases its speed to keep its place (the `Sea`), and within a body's length of the fish ahead
+  is never faster than it, so none ever touches, stops, turns back or catches up; they loop
+  round just out of sight at the ends and float gently. Newcomers wait out of sight at a
+  lane's start and swim in shoal by shoal when there's room. The pace rises
   level by level (about 65 to 130 pixels a second). Those under the net when it lands are
   netted and ride up in its bag.
 

@@ -121,7 +121,7 @@ class Net {
     this.limits = {
       left: Math.max(Math.min(...xs) - level.width * 0.4, clear.left ?? -Infinity),
       right: Math.min(Math.max(...xs) + level.width * 0.4, clear.right ?? Infinity),
-      top: Math.max(24, Math.min(...ys) - level.height * 0.55), bottom: bottom + 34,
+      top: Math.max(24, Math.min(...ys) - level.height * 0.55), bottom: bottom + 40,
     };
     // the stops it can reach: on from its place each way while the frame stays a simple, roomy
     // quadrilateral inside the limits
@@ -354,6 +354,16 @@ class Net {
 
   degreesShown(letter) {
     return Math.round(this.angle(letter));
+  }
+
+  // A side's slope: how many degrees it rises from level, left to right (falling is negative),
+  // whole degrees from -89 to 90. Two sides are parallel exactly when their slopes match.
+  slopeShown(name) {
+    const v = this.sideOf(name);
+    let a = Math.atan2(-v.y, v.x) * 180 / Math.PI;
+    while (a > 90) a -= 180;
+    while (a <= -90) a += 180;
+    return Math.round(a) || 0;
   }
 
   halvesShown() {
@@ -805,15 +815,61 @@ class Net {
 
   // Only what the level is about is shown: parallel ticks, side lengths, angle arcs or the
   // diagonals with their halves. Reference values stay fixed; the rest update as the corner moves.
+  // The labels are gathered first and laid out together (see placeLabels), so none covers another
+  // however crowded the net or small the screen.
   drawMeasurements(ctx, c) {
+    this.labelQueue = [];
+    this.measure(ctx, c);
+    const labels = this.labelQueue;
+    this.labelQueue = null;
+    this.placeLabels(labels);
+    for (const l of labels) this.text(ctx, l.string, l.x, l.y, l.px, l.colour, l.live);
+  }
+
+  // Nudges overlapping labels apart, each pair along the way they overlap least, a few rounds.
+  placeLabels(labels) {
+    const k = this.textScale;
+    const half = (l) => ({ w: (l.string.length * l.px * 0.55 * k) / 2 + 4, h: (l.px * 1.15 * k) / 2 });
+    for (let round = 0; round < 16; round += 1) {
+      let moved = false;
+      for (let i = 0; i < labels.length; i += 1) {
+        for (let j = i + 1; j < labels.length; j += 1) {
+          const a = labels[i];
+          const b = labels[j];
+          const ha = half(a);
+          const hb = half(b);
+          const ox = ha.w + hb.w - Math.abs(a.x - b.x);
+          const oy = ha.h + hb.h - Math.abs(a.y - b.y);
+          if (ox <= 0 || oy <= 0) continue;
+          moved = true;
+          if (oy < ox) {
+            const d = (oy / 2 + 1) * (b.y >= a.y ? 1 : -1);
+            a.y -= d;
+            b.y += d;
+          } else {
+            const d = (ox / 2 + 1) * (b.x >= a.x ? 1 : -1);
+            a.x -= d;
+            b.x += d;
+          }
+        }
+      }
+      if (!moved) break;
+    }
+  }
+
+  measure(ctx, c) {
     const L = this.level;
     if (!L) return;
     const m = (name) => `${this.metresShown(name).toFixed(1)} m`;
     const deg = (letter) => `${this.degreesShown(letter)}°`;
+    const slope = (name) => `${this.slopeShown(name)}°`.replace('-', '−');
     switch (L.type) {
       case 'parallel':
+        // the parallel marks say which sides; their slopes, side by side, say whether they are
+        // (the marks never light up by themselves: the numbers tell, and Drop Net decides)
         this.drawSideHighlight(ctx, c, L.sides);
-        this.drawTicks(ctx, c, L.sides, this.pairParallel(L.sides), L.sides[0] === 'AB' ? 1 : 2);
+        this.drawTicks(ctx, c, L.sides, false, L.sides[0] === 'AB' ? 1 : 2);
+        for (const name of L.sides) this.drawLength(ctx, c, name, slope(name), name.includes(L.corner));
         break;
       case 'length':
         this.drawLength(ctx, c, L.reference, `${L.metres[L.reference]} m`);
@@ -844,8 +900,13 @@ class Net {
         this.drawDiagonals(ctx, c, true);
         break;
       default: {
+        // the whole parallelogram: its sides, its opposite angles and its diagonals, as the
+        // level's hint says ("sides, angles, diagonals")
+        this.drawDiagonals(ctx, c, false);
         const mine = ['AB', 'BC', 'CD', 'AD'].filter((name) => name.includes(L.corner));
         for (const name of ['AB', 'BC', 'CD', 'AD']) this.drawLength(ctx, c, name, m(name), mine.includes(name));
+        this.drawAngle(ctx, c, 'A', deg('A'), true);
+        this.drawAngle(ctx, c, 'C', deg('C'), true);
       }
     }
   }
@@ -1112,6 +1173,10 @@ class Net {
   // Readable on any background: white (or coloured) text with a dark edge. Live values swell
   // a little while a hint is on.
   text(ctx, string, x, y, px, colour, live = false) {
+    if (this.labelQueue) {
+      this.labelQueue.push({ string, x, y, px, colour, live });
+      return;
+    }
     const swell = (live && this.hintPulse > 0 && !this.reduced ? 1 + 0.15 * Math.abs(Math.sin(this.time * 8)) : 1) * this.textScale;
     ctx.save();
     ctx.translate(x, y);

@@ -31,6 +31,13 @@
 
       <div id="hud" class="hud" hidden>
         <div class="hud-top">
+          <div id="catch" class="catch" role="status" aria-label="Fish caught: 0">
+            <span class="catch-row">
+              <svg class="catch-icon" viewBox="0 0 44 28" aria-hidden="true"><path d="M3 14c6-9 19-11 27-4l10-7v22l-10-7c-8 7-21 5-27-4z" fill="#ffd166" stroke="#3b1d00" stroke-width="2.6" stroke-linejoin="round"/><circle cx="12.5" cy="11.5" r="2.4" fill="#3b1d00"/></svg>
+              <span id="catch-count" class="catch-count">0</span>
+            </span>
+            <span id="nets" class="nets" aria-hidden="true"></span>
+          </div>
           <div id="instruction" class="instruction" role="status" aria-live="polite">
             <span id="instruction-text" class="words" aria-hidden="true"></span>
             <span id="instruction-say" class="sr-only"></span>
