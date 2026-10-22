@@ -52,7 +52,7 @@ class AudioEngine {
   // so the caller falls back to the synthesized voice). The music ducks under the voice.
   speak(who, text) {
     const buf = this.voiceBuffers.get(voiceKey(who, text));
-    if (!this.ctx || !buf) return 0;
+    if (!this.ctx || !buf || this.ctx.state !== 'running') return 0;
     this.stopVoice();
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
@@ -273,8 +273,10 @@ class AudioEngine {
     }
   }
 
+  // Effects are skipped while the browser holds the sound back (before the first tap), not
+  // queued up to burst out together when it lets go.
   play(name) {
-    if (!this.ctx) return;
+    if (!this.ctx || this.ctx.state !== 'running') return;
     const now = this.ctx.currentTime;
     const seq = (notes, gap, opts) => notes.forEach((n, i) => this.tone({ freq: n, t: now + i * gap, ...opts }));
     switch (name) {
@@ -295,6 +297,11 @@ class AudioEngine {
       case 'narrate': this.bell(523.25, now, 0.07); this.bell(783.99, now + 0.12, 0.05); break;
       case 'woah': this.tone({ freq: 380, to: 1150, type: 'sine', dur: 0.34, gain: 0.11 }); this.tone({ freq: 1150, to: 720, t: now + 0.32, type: 'sine', dur: 0.3, gain: 0.08 }); break;
       case 'leap': this.noise({ dur: 0.5, type: 'bandpass', freq: 400, to: 2600, q: 1.1, gain: 0.22 }); this.tone({ freq: 300, to: 760, dur: 0.4, gain: 0.08, type: 'triangle' }); break;
+      // a catch: Fishing Frenzy's party toot as the bubble confetti bursts
+      case 'combo3': [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((n, i) => { this.tone({ freq: n, type: 'triangle', t: now + i * 0.07, dur: i === 4 ? 0.45 : 0.1, gain: 0.08 }); this.tone({ freq: n * 2, type: 'sine', t: now + i * 0.07, dur: 0.08, gain: 0.03 }); }); this.noise({ t: now + 0.3, dur: 0.4, type: 'highpass', freq: 5000, gain: 0.05 }); break;
+      // the banner: its logo popping in
+      case 'fanfare': [392.0, 523.25, 659.25].forEach((n, i) => { this.tone({ freq: n, type: 'square', t: now + i * 0.08, dur: 0.1, gain: 0.05 }); this.tone({ freq: n, type: 'triangle', t: now + i * 0.08, dur: 0.12, gain: 0.07 }); }); [523.25, 659.25, 783.99, 1046.5].forEach((n) => this.tone({ freq: n, type: 'triangle', t: now + 0.26, dur: 0.7, gain: 0.06, send: 0.5 })); this.bell(2093, now + 0.3, 0.06); break;
+      case 'thud': this.tone({ freq: 150, to: 52, dur: 0.28, gain: 0.3 }); this.noise({ dur: 0.18, type: 'lowpass', freq: 420, to: 120, gain: 0.35 }); break;
       case 'boing': this.tone({ freq: 170, to: 560, type: 'sine', dur: 0.22, gain: 0.12 }); this.tone({ freq: 560, to: 420, t: now + 0.2, type: 'sine', dur: 0.16, gain: 0.07 }); break;
       // comic sound effects for Popo's entrance
       case 'honk': [0, 0.2].forEach((d) => { this.tone({ freq: 420, to: 380, type: 'square', t: now + d, dur: 0.13, gain: 0.07 }); this.tone({ freq: 630, to: 560, type: 'triangle', t: now + d, dur: 0.13, gain: 0.05 }); }); break;
@@ -305,6 +312,8 @@ class AudioEngine {
       case 'word': { const f = 700 + Math.random() * 260; this.tone({ freq: f, to: f * 1.15, type: 'sine', dur: 0.05, gain: 0.04 }); break; }
       case 'cheer': [523.25, 659.25, 783.99].forEach((n, i) => this.tone({ freq: n, t: now + i * 0.07, type: 'triangle', dur: 0.16, gain: 0.08 })); break;
       case 'bloop': this.tone({ freq: 420, to: 980, dur: 0.12, gain: 0.09 }); this.tone({ freq: 620, to: 1300, t: now + 0.08, dur: 0.09, gain: 0.05 }); break;
+      // a fish reaching the counter: a bright plink, rising
+      case 'count': this.tone({ freq: 1320, to: 1760, type: 'triangle', dur: 0.08, gain: 0.08 }); this.tone({ freq: 1980, t: now + 0.06, type: 'sine', dur: 0.14, gain: 0.05 }); break;
       // the end screen's circle closing in (or shut), a sliding whistle as in Fishing Frenzy
       case 'iris': this.tone({ freq: 1400, to: 260, type: 'sine', dur: 0.75, gain: 0.1 }); break;
       // the net puzzle: picking the corner up, letting it go off its place, it clicking home

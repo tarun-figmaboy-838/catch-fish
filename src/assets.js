@@ -2,7 +2,6 @@
 'use strict';
 const { FISH_NATURAL_ATLAS } = PopoGame;
 
-const TITLE = PopoGame.TITLE_DATA || 'assets/backgrounds/title.webp';
 const PLAY = PopoGame.PLAY_DATA || 'assets/sprites/play.webp';
 const BACKGROUNDS = PopoGame.BACKGROUND_DATA || [1, 2, 3, 4].map((n) => `assets/backgrounds/location-${n}.webp`);
 
@@ -44,7 +43,7 @@ function preloadBackground(index) {
 const generated = (name) => loadImage(`assets/generated-web/${name}.webp`);
 
 async function loadCoreAssets() {
-  const [operating, winch, rope, connector, net, rowCycle, naturalFish, bg0, props, title, play] = await Promise.all([
+  const [operating, winch, rope, connector, net, rowCycle, naturalFish, bg0, props, play, logo] = await Promise.all([
     generated('popo-operating'),
     generated('winch-arched'),
     generated('rope'),
@@ -54,8 +53,10 @@ async function loadCoreAssets() {
     loadImage('assets/sprites/fish-natural.webp'),
     preloadBackground(0),
     loadImage('assets/sprites/popo-props.webp'),
-    loadImage(TITLE),
     loadImage(PLAY),
+    loadImage('assets/sprites/logo.webp'), // the banner's logo (tools/build-assets.py --logo)
+    // the canvas text (the end screen's letters) needs its font there first
+    document.fonts ? document.fonts.load('700 120px Fredoka').catch(() => {}) : null,
   ]);
   assets.popoOperating = operating;
   assets.winchPolished = winch;
@@ -63,8 +64,8 @@ async function loadCoreAssets() {
   assets.ropeConnector = connector;
   assets.netPolished = net;
   assets.rowCycle = rowCycle;
-  assets.title = title;
   assets.play = play;
+  assets.logo = logo;
   assets.props = props;
   assets.naturalFish = { img: naturalFish, boxes: FISH_NATURAL_ATLAS.boxes, scale: FISH_NATURAL_ATLAS.scale };
   preloadBackground(1);

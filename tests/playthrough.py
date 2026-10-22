@@ -25,6 +25,7 @@ STATE = '''() => { const s = window.popoDebug.state, g = window.popoDebug.game;
            complete: !document.getElementById('btn-again').hidden, ending: Boolean(g.ending && g.ending.titleAt !== undefined), start: !document.getElementById('screen-start').hidden,
            ok: g.net.check().ok, locked: g.net.locked, fish: s.fish.length, school: PopoGame.schoolSize(PopoGame.LEVELS[s.level]),
            stop: g.net.stopAt, netRight: g.netRight, handleHidden: document.getElementById('handle').hidden,
+           counter: Number(document.getElementById('catch-count').textContent),
            words: document.querySelectorAll('#instruction-text .w').length, wordsIn: document.querySelectorAll('#instruction-text .w.in').length,
            lines: document.querySelectorAll('#instruction-text br').length + 1,
            oneLine: new Set([...document.querySelectorAll('#instruction-text .w')].map((w) => w.offsetTop)).size === 1,
@@ -130,6 +131,7 @@ def play():
         for i, level in enumerate(levels):
             st = wait_for(page, lambda s, i=i: s['phase'] == 'puzzleReady' and s['level'] == i, 40, f'level {i + 1}')
             check(st['loc'] == level['location'] and st['fish'] == st['school'], f'level {i + 1}: in its waters with {st["school"]} fish')
+            check(st['counter'] == st['caught'], f'level {i + 1}: the counter shows every fish caught so far', f'{st["counter"]} of {st["caught"]}')
             if i == 2:
                 # a two-sentence prompt: one line, its words still arriving, then all there
                 check(st['lines'] == 1 and st['oneLine'] and st['wordsIn'] < st['words'], f'level {i + 1}: the prompt comes on one line, word by word',

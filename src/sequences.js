@@ -14,7 +14,7 @@ const shuffled = (list) => list.map((x) => [Math.random(), x]).sort((a, b) => a[
 // Before the first line, a cartoon entrance: Popo zooms in rowing flat out (honk honk!), slams
 // on the brakes with a screech, overshoots and springs back boing-boing, and in a poof the
 // paddle is gone and his paws are on the winch's wheel (ta-da!).
-async function popoArrives(game, token) {
+async function popoArrives(game, token, { hop = true } = {}) {
   const { popo, fx, audio } = game;
   const reduced = fx.reduced;
   const from = -620;
@@ -105,6 +105,7 @@ async function popoArrives(game, token) {
   fx.sparkle(popo.headTop().x + 40, popo.headTop().y + 50, 18);
   await clock.wait(380, token);
   // a happy hop while the fish leap around him
+  if (!hop) return;
   game.storyCue('hop');
   await clock.wait(900, token);
 }
@@ -170,13 +171,38 @@ function fishSaysHello(game, token) {
   }
 }
 
+// The banner, played out on the lake itself: Popo zooms in from the left on his raft, a big fish
+// leaps out of the water past him, and at the top of its leap the logo pops in; then the Play
+// button bobs up out of the water (see TitleScreen).
+async function banner(game) {
+  const token = newToken();
+  const { fx, title } = game;
+  const reduced = fx.reduced;
+  // Popo starts out of sight, off to the left (popoArrives brings him in)
+  game.popo.travelShift = -620;
+  try {
+    state.phase = PHASE.TITLE;
+    await clock.wait(reduced ? 100 : 350, token);
+    popoArrives(game, token, { hop: false }).catch(swallow);
+    // the fish set off under the water as he settles; the logo pops in as the big one leaps
+    await clock.wait(reduced ? 1600 : 3000, token);
+    title.sendFish();
+    await clock.wait(reduced ? 200 : 2700, token);
+    title.showPlay();
+  } catch (e) {
+    swallow(e);
+  }
+}
+
 // The journey opens with the narrator; then the first school swims in and the net appears.
-async function opening(game) {
+// From the banner Popo is already in his place, so the story starts as its logo clears away.
+async function opening(game, { arrived = false } = {}) {
   const token = newToken();
   try {
     state.phase = PHASE.INTRO;
     game.instruct('');
-    await popoArrives(game, token);
+    if (arrived) await clock.wait(game.fx.reduced ? 150 : 550, token);
+    else await popoArrives(game, token);
     for (const line of STORY.intro) await game.say(line, token);
     await firstPuzzle(game, token);
   } catch (e) {
@@ -417,13 +443,16 @@ async function dropNet(game) {
     }
     state.phase = PHASE.LEVEL_COMPLETE;
     state.caught += caught.length;
-    ui.setNets(state.level + 1, state.level + 1);
     popo.react('laugh', 1.6);
     audio.play('catch');
     const ring = net.ring();
     fx.sparkle(ring.x, ring.y + net.bottom() * 0.7, 16);
     for (const f of caught) f.wiggle();
-    await game.say(STORY.catch, token);
+    // no words: a burst of bright bubbles from the bag and a party toot, as in Fishing Frenzy
+    game.confettiFrom(ring.x, ring.y + net.bottom() * 0.6);
+    audio.play('combo3');
+    game.storyCue('hop');
+    await clock.wait(fx.reduced ? 300 : 800, token);
     await collectFish(game, caught, token);
     await nextLevel(game, token);
   } catch (e) {
@@ -540,6 +569,7 @@ async function escape(game, f, i, hole, token) {
 // its rim. The whole fish remains intact; no instant flip or visible disappearance.
 async function collectFish(game, fish, token) {
   const { popo, fx, audio } = game;
+  const batch = { left: fish.length, total: fish.length };
   const flights = fish.map((f, i) => clock.wait(i * 150, token).then(() => {
     const from = { x: f.x, y: f.y };
     f.caught = null;
@@ -560,8 +590,8 @@ async function collectFish(game, fish, token) {
       const bucket = popo.bucketPoint();
       fx.sparkle(bucket.x, bucket.y-10, 8);
       audio.play('collect');
-      game.landed += 1;
-      game.ui.setCatch(game.landed, true);
+      // ...and up to the counter
+      game.flyToCounter(f, batch);
     });
   }));
   await Promise.all(flights);
@@ -691,6 +721,7 @@ async function theEnd(game, token) {
   // the scene's left edge must stay outside the circle as it glides
   centre.x = Math.max(centre.x, r + 4);
   const ending = game.ending = { x: centre.x, y: centre.y, r: 1500, pan: { x: 0, y: 0 }, t: 0, laugh: true, laughIn: 0, giggles: 2 };
+  ui.el.pause.style.visibility = 'hidden'; // nothing to pause on the end screen
   audio.play('iris');
   await clock.tween(reduced ? 400 : 950, token, (t) => { ending.r = 1500 + (r - 1500) * ease.inOut(t); });
   const to = { x: STAGE_W / 2, y: Math.min(STAGE_H - r - 12, Math.max(575, r + 235)) };
@@ -701,7 +732,7 @@ async function theEnd(game, token) {
   game.announceComplete();
   ending.titleAt = ending.t;
   audio.play('tada');
-  ui.setCatch(game.landed, true);
+  ui.setCatch(game.landed, 'cheer');
   await clock.wait(reduced ? 600 : 1300, token);
   ui.showAgain(true);
   audio.play('bloop');
@@ -731,5 +762,5 @@ async function closeCurtain(game) {
   startLevels(game);
 }
 
-Object.assign(PopoGame, { opening, startLevels, dropNet, rowTo, celebrate, closeCurtain, letNetDown });
+Object.assign(PopoGame, { banner, opening, startLevels, dropNet, rowTo, celebrate, closeCurtain, letNetDown });
 })(window.PopoGame = window.PopoGame || {});

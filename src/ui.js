@@ -66,7 +66,7 @@ class UI {
       instruction: $('instruction'), instructionText: $('instruction-text'), instructionSay: $('instruction-say'), drop: $('btn-drop'),
       sound: $('btn-sound'), pause: $('btn-pause'),
       pauseOverlay: $('overlay-pause'), resume: $('btn-resume'), restart: $('btn-restart'),
-      again: $('btn-again'), scene: $('scene'), catch: $('catch'), catchCount: $('catch-count'), nets: $('nets'),
+      again: $('btn-again'), scene: $('scene'), catch: $('catch'), catchCount: $('catch-count'), catchBadge: $('catch-badge'),
       rotate: $('rotate-hint'), speech: $('speech'), caption: $('caption'),
     };
     this.handlers = {};
@@ -84,8 +84,6 @@ class UI {
     this.el.drop.addEventListener('click', h('drop'));
     this.el.again.addEventListener('click', h('again'));
     this.wireHandle();
-    // a dot for each net, filled as it is done
-    this.netDots = PopoGame.LEVELS.map(() => this.el.nets.appendChild(document.createElement('i')));
     // the arrows beside the knob: a tap moves the corner one stop that way
     for (const [el, steps] of [[this.el.stepBack, -1], [this.el.stepOn, 1]]) {
       el.addEventListener('click', (e) => { e.preventDefault(); this.emit('step', steps); });
@@ -406,16 +404,32 @@ class UI {
     if (show) this.el.resume.focus();
   }
 
-  // The catch so far, a fish and a number at the top left; it bounces as each fish lands.
-  setCatch(n, bounce = false) {
+  // The catch so far at the top left. `move` is how it greets the number: 'gulp' for a fish
+  // arriving, 'cheer' for every tenth.
+  setCatch(n, move = null) {
     this.el.catchCount.textContent = String(n);
     this.el.catch.setAttribute('aria-label', `Fish caught: ${n}`);
-    if (bounce) this.pop(this.el.catch);
+    if (!move) return;
+    this.el.catch.classList.remove('gulp', 'cheer');
+    void this.el.catch.offsetWidth;
+    this.el.catch.classList.add(move);
   }
 
-  // The nets: those done filled, the one being fished ringed.
-  setNets(done, now) {
-    this.netDots.forEach((dot, i) => { dot.className = i < done ? 'done' : i === now ? 'now' : ''; });
+  // "+3" after a catch, popping up beside the counter and drifting off.
+  floatGain(n) {
+    const gain = document.createElement('span');
+    gain.className = 'gain';
+    gain.textContent = `+${n}`;
+    gain.setAttribute('aria-hidden', 'true');
+    gain.addEventListener('animationend', () => gain.remove());
+    this.el.catch.appendChild(gain);
+  }
+
+  // The middle of the counter's fish badge, as a stage point: where a caught fish flies to.
+  counterPoint() {
+    const r = this.el.catchBadge.getBoundingClientRect();
+    const h = this.el.hits.getBoundingClientRect();
+    return { x: (r.left + r.width / 2 - h.left) / this.scale, y: (r.top + r.height / 2 - h.top) / this.scale };
   }
 
   // The end screen's one button, springing in at the bottom right once The End is up.

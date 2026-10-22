@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#0b4fb8">
-  <title>Shape Fish Adventure</title>
+  <title>Fishing Frenzy 2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap">
@@ -33,10 +33,9 @@
         <div class="hud-top">
           <div id="catch" class="catch" role="status" aria-label="Fish caught: 0">
             <span class="catch-row">
-              <svg class="catch-icon" viewBox="0 0 44 28" aria-hidden="true"><path d="M3 14c6-9 19-11 27-4l10-7v22l-10-7c-8 7-21 5-27-4z" fill="#ffd166" stroke="#3b1d00" stroke-width="2.6" stroke-linejoin="round"/><circle cx="12.5" cy="11.5" r="2.4" fill="#3b1d00"/></svg>
+              <span id="catch-badge" class="catch-badge" aria-hidden="true"><svg class="catch-icon" viewBox="0 0 44 28"><path d="M3 14c6-9 19-11 27-4l10-7v22l-10-7c-8 7-21 5-27-4z" fill="#ffd23f" stroke="#fff3c4" stroke-width="2" stroke-linejoin="round"/><path d="M19 8.5c2 3.5 2 7.5 0 11" fill="none" stroke="#e8890c" stroke-width="2" stroke-linecap="round"/><circle cx="11.5" cy="11.5" r="2.6" fill="#3b1d00"/><circle cx="12.3" cy="10.7" r="0.9" fill="#fff"/></svg></span>
               <span id="catch-count" class="catch-count">0</span>
             </span>
-            <span id="nets" class="nets" aria-hidden="true"></span>
           </div>
           <div id="instruction" class="instruction" role="status" aria-live="polite">
             <span id="instruction-text" class="words" aria-hidden="true"></span>
@@ -73,7 +72,7 @@
 
 
       <section id="screen-start" class="screen start" aria-labelledby="game-title">
-        <h1 id="game-title" class="sr-only">Shape Fish Adventure</h1>
+        <h1 id="game-title" class="sr-only">Fishing Frenzy 2</h1>
         <button id="btn-play" class="play-hit" type="button" aria-label="Play"></button>
         <p id="loading" class="loading" role="status">Loading…</p>
       </section>
@@ -100,6 +99,7 @@
   <script src="src/voice-data.js" defer></script>
   <script src="src/audio.js" defer></script>
   <script src="src/ui.js" defer></script>
+  <script src="src/title.js" defer></script>
   <script src="src/sequences.js" defer></script>
   <script src="src/game.js" defer></script>
   <script src="src/main.js" defer></script>

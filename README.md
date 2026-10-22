@@ -1,6 +1,6 @@
-# Popo's Parallelogram Net
+# Fishing Frenzy 2
 
-A browser game for Grade 8 about parallelograms. Popo the polar bear fishes with a net hung
+Popo's parallelogram net: a browser game for Grade 8 about parallelograms. Popo the polar bear fishes with a net hung
 from a winch on his raft. Before he lowers it, the child fixes its shape: three of its corners
 A, B, C, D are fixed, and the fourth slides along a track, stop by stop, until the net has the
 property the level asks for. Meanwhile a crowd of fish roams the whole sea, so the child
@@ -35,12 +35,24 @@ never change, so a year-long cache would keep old art against new code.
 
 ## The game
 
-- **Flow.** Title → Popo rows in (honk, screech, boing, poof) with the net wound up in a
-  bundle under the boom → three narrator lines, the first school swims in on the last one →
-  Popo lets the net down and it opens into its first frame → level 1. After each catch the fish
-  hop into the bucket, Popo winds the empty net up into its bundle, rows on when the next level
-  is in new waters (levels 1–2, 3–4, 5–6 and 7–8 are in the four locations), and lets the net
-  down in its new shape as the next school swims in. After level 8, Popo's "Wow! What a
+- **Banner** (`src/title.js`, `banner` in `src/sequences.js`), played out on the lake itself:
+  Popo zooms in from the left on his raft (honk, screech, boing, poof), a big fish dashes in
+  under the water and leaps high where the logo will be, and at the top of its leap the
+  painted "Fishing Frenzy 2" logo (`asset/fishing-frenzy-2-logo.png`) pops in with a fanfare;
+  the fish drops down behind it, two little fish follow, and from behind the logo they pop
+  their heads up over it (or out past the plank's end, looking at Popo), look about and duck
+  down. Then the Play button bobs up out of the water. Taps: a peeking fish ducks with a
+  giggle, the logo wobbles and every fish pops up to look. The music and sounds play from the
+  first tap anywhere (browsers hold sound back until then; effects meanwhile are skipped, not
+  saved up). Play pops the logo away, the fish leap back into the lake, and the story begins
+  with Popo already in place.
+- **Flow.** Banner → Play → three narrator lines, the first school swims in on the last one →
+  Popo lets the net down and it opens into its first frame → level 1. After each catch bright
+  bubble confetti bursts out of the bag with a party toot (Fishing Frenzy's cheer, no words),
+  the fish hop into the bucket and fly up to the counter (top left), and Popo winds the empty
+  net up into its bundle, rows on when the next level is in new waters (levels 1–2, 3–4, 5–6
+  and 7–8 are in the four locations), and lets the net down in its new shape as the next
+  school swims in. After level 8, Popo's "Wow! What a
   catch!" and the end screen (`theEnd` in `src/sequences.js`, drawn on `#curtain` by
   `Game.drawCurtain`), as in Fishing Frenzy: a circle closes in on Popo and his raft over the
   live scene and glides with them to the middle, everything around it a warm, slowly turning
@@ -236,5 +248,7 @@ Headless Chromium through Python Playwright (`pip install playwright pillow`):
   second; the game uses the arched one, whose boom leaves room for the net.
 - Each background gets a water mask: the surface waves move only open water, so the sky,
   mountains, ice shelves and icebergs stay still. The seaweed sway stops at the plant tips.
-- The title banner and play button are built into `assets/` and embedded as data URLs so the
-  canvas can use them from the file system.
+- The play button is built into `assets/` and embedded as a data URL. The banner's logo is
+  the user's painted `asset/fishing-frenzy-2-logo.png`, used whole: `tools/build-assets.py
+  --logo` trims and scales it into `assets/sprites/logo.webp` and prints the top of its snow
+  (`LOGO_TOP` in `src/title.js`, which the fish peek over).

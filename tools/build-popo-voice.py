@@ -4,8 +4,8 @@
 In Fishing Frenzy (~/Downloads/popo-fishing/fishing-frenzy) Popo's lines were made in the "Ai Wala
 Human By Aamir" studio: Gemini's Puck with a Hindi script, so the English comes out with an Indian
 accent, 10% deeper than Swiftee so he is a bigger, warmer bear. He never gives instructions there;
-he only reacts, in a few comic words: "Great catch!", "Whoopsie Doopsie!", "Huh?!", "Woah!", "Wow!
-What a catch!". This copies those clips out of Fishing Frenzy's voice data into this game's
+he only reacts, in a few comic words: "Whoopsie Doopsie!", "Huh?!", "Woah!", "Wow! What a catch!"
+(a catch here is cheered with bubble confetti, as in Fishing Frenzy, not "Great catch!"). This copies those clips out of Fishing Frenzy's voice data into this game's
 src/voice-data.js under the same keys (speaker and on-screen text, as audio.js voiceKey() makes
 them), replacing the old Kokoro takes. tools/build-voice.py runs it after writing the file, so a
 rebuild keeps them. The narrator's lines are this game's own and are left alone.
@@ -21,9 +21,9 @@ FRENZY = Path.home() / 'Downloads' / 'popo-fishing' / 'fishing-frenzy' / 'parts'
 SOURCES = [FRENZY / 'fishing-2' / 'src' / 'voice-data.js', FRENZY / 'fishing-1' / 'src' / 'voice-data.js']
 
 # Popo's lines in this game (as on screen), all recorded in Fishing Frenzy
-LINES = ['*Great* catch!', 'Whoopsie Doopsie!', 'Huh?!', '*Woah!*', '*Wow!*', 'What a *catch!*']
+LINES = ['Whoopsie Doopsie!', 'Huh?!', '*Woah!*', '*Wow!*', 'What a *catch!*']
 # his lines from before, no longer said
-RETIRED = ['We caught them *all*!']
+RETIRED = ['We caught them *all*!', '*Great* catch!']
 
 ENTRY = re.compile(r'^\s*("(?:[^"\\]|\\.)*"):\s*("data:audio/[^"]*"),?\s*$')
 

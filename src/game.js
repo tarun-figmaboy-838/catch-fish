@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, Sea, refreshShadows, LOCATIONS, LEVELS, schoolFor, Popo, Winch, Net, TUCK, opening, startLevels, dropNet, closeCurtain, Cancelled, STAGE_W, STAGE_H, SCENE_SHIFT, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
+const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, Sea, refreshShadows, refreshDeep, LOCATIONS, LEVELS, schoolFor, Popo, Winch, Net, TUCK, opening, startLevels, dropNet, closeCurtain, Cancelled, STAGE_W, STAGE_H, SCENE_SHIFT, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent, TitleScreen } = PopoGame;
 
 const HINT_REPEAT = 7;    // seconds of idling between hints once one has been shown
 const NET_CLEARANCE = 40; // the net's bottom edge hangs this far above the water
@@ -46,18 +46,48 @@ function readingTimes(words, pace) {
   });
 }
 
+// The end screen's curtain: a warm sunburst with slowly turning rays everywhere but a circle,
+// which is framed in dark brown and cream.
+function drawSunburst(ctx, x, y, r, turn) {
+  const far = Math.hypot(Math.max(x, STAGE_W - x), Math.max(y, STAGE_H - y)) + 40;
+  if (r >= far) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, STAGE_W, STAGE_H);
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.clip('evenodd');
+  const glow = ctx.createRadialGradient(x, y, r, x, y, far);
+  glow.addColorStop(0, '#ffb347');
+  glow.addColorStop(0.18, '#ff6f61');
+  glow.addColorStop(0.45, '#d9437f');
+  glow.addColorStop(1, '#4b2a9b');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+  ctx.globalAlpha = 0.08;
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 16; i += 1) {
+    const a = turn + (i / 16) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.arc(x, y, far, a, a + Math.PI / 16);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+  if (r > 1) {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.lineWidth = 16;
+    ctx.strokeStyle = '#3b1d00';
+    ctx.stroke();
+    ctx.lineWidth = 9;
+    ctx.strokeStyle = '#fff3d6';
+    ctx.stroke();
+  }
+}
+
 // Twinkles either side of The End on the end screen, from its middle.
 const ENDING_TWINKLES = [[-420, -50], [-370, 40], [-440, 95], [400, -60], [440, 30], [370, 100], [-300, -110]];
-
-// The title banner: its water surface, sand line, the play button floating in its water, where
-// the hooked fish splashes, and sparkle points along the logo's snowy edges.
-const TITLE = {
-  waterline: 610,
-  seabed: 860,
-  play: { x: 836, y: 772, r: 112 },
-  splash: { left: 790, right: 980, y: 588 },
-  twinkles: [[884, 118], [1092, 86], [1360, 62], [1598, 142], [1588, 300], [962, 334]],
-};
 
 class Game {
   constructor({ stage, ui, audio }) {
@@ -69,20 +99,18 @@ class Game {
     this.net = new Net();
     this.fx = new Effects();
     this.water = new WaterScene(document.getElementById('water'));
-    this.titleFx = new Effects();
-    this.titleFx.setWaterline(TITLE.waterline);
-    this.playAnim = { hover: 0, hoverTarget: 0, press: 0, burst: 0, bubbleIn: 0.3 };
-    this.titleFade = 0;
-    this.titleSplashIn = 0.8;
     this.raftRippleIn = 1;
     this.dialogue = null;
     this.leapers = [];
     this.sea = new Sea();  // the school's lanes in these waters
     this.strays = [];      // fish swimming out of the sea as the golden school swims in
+    this.deep = [];        // far fish in the deep water, scenery only (refreshDeep)
     this.delivery = null;  // the words of the instruction plate still to appear
     this.netRight = false; // the frame has been proven right this level; only the timing is left
     this.ending = null;    // the end screen: its circle, the scene's pan, The End (see theEnd)
-    this.landed = 0;       // fish in the bucket this game (the counter at the top left)
+    this.landed = 0;       // fish counted this game (the counter at the top left)
+    this.fliers = [];      // caught fish flying from the bucket up to the counter
+    this.confetti = [];    // bubble confetti: a catch's bright bubbles bursting up and popping
     this.handShown = false;
     this.poof = null;
     this.ambient = [];
@@ -101,6 +129,7 @@ class Game {
     this.running = false;
     ui.setScale(stage.scale);
     this.applyLocation();
+    this.title = new TitleScreen(this); // the banner's logo and Play button (src/title.js)
   }
 
   // --- lifecycle ------------------------------------------------------------
@@ -111,17 +140,18 @@ class Game {
       this.lastFrame = performance.now();
       requestAnimationFrame((t) => this.loop(t));
     }
+    if (state.phase === PHASE.TITLE) this.title.begin();
   }
 
+  // Play: the banner was the lake itself with Popo already in his place, so as its logo clears
+  // away the story simply begins (opening, without his arrival).
   start() {
-    this.titleFade = 1;
     this.audio.init();
     this.audio.resume();
     this.audio.startMusic();
-    this.reset();
     this.ui.hideStart();
     this.ui.showHud();
-    opening(this);
+    opening(this, { arrived: true });
     this.showIdleScene();
   }
 
@@ -171,6 +201,7 @@ class Game {
     this.ambient = [];
     this.leapers = [];
     this.strays = [];
+    this.deep = [];
     this.sea = new Sea();
     this.hop = null;
     this.poof = null;
@@ -179,13 +210,15 @@ class Game {
     this.netRight = false;
     this.ending = null;
     this.landed = 0;
+    this.fliers = [];
+    this.confetti = [];
     this.ui.setCatch(0);
-    this.ui.setNets(0, 0);
     this.endLine();
     this.instruct('');
     // a restart from the pause card must hand back the HUD and the net's corner
     this.ui.el.hud.inert = false;
     this.ui.el.hits.inert = false;
+    this.ui.el.pause.style.visibility = '';
     this.applyLocation();
     this.prepareLevel(0);
   }
@@ -248,6 +281,10 @@ class Game {
     // ...and the school roams the whole sea at that depth, so the net catches whoever is under it
     // when it lands: the child drops it as fish swim beneath
     this.swimArea = { left: -SWIM_BEYOND, right: STAGE_W + SWIM_BEYOND, top: this.fishArea.top, bottom: this.fishArea.bottom };
+    // the lake's own life, there from the banner on: far shadows, and far fish in the deep water
+    // under the school, down to the sea floor
+    this.ambient = refreshShadows(this.ambient, 4, this.area);
+    this.deep = refreshDeep(this.deep, 6, { top: this.swimArea.bottom + 24, bottom: STAGE_H - 26 });
     this.hintShown = false;
     this.handShown = false;
     return before;
@@ -259,7 +296,6 @@ class Game {
     const level = LEVELS[state.level];
     const pace = (65 + 7 * state.level) * (level.rare ? 1.15 : 1);
     state.fish = this.sea.stock(state.fish, this.swimArea, schoolFor(level), { rare: level.rare, pace });
-    this.ambient = refreshShadows(this.ambient, 4, this.area);
   }
 
   // The first school swims in on the narrator's cue (or straight away on Play Again).
@@ -276,7 +312,6 @@ class Game {
     state.misses = 0;
     this.net.locked = false;
     this.netRight = false;
-    this.ui.setNets(state.level, state.level);
     this.lastTick = { value: this.net.stopAt, at: 0 };
     this.popo.idle();
     this.ui.showHandle(true);
@@ -423,10 +458,7 @@ class Game {
 
   // Tapping the water is just for fun: bubbles, a soft bloop, and curious fish come to look.
   onWaterTap(point) {
-    if (state.phase === PHASE.TITLE) {
-      this.onTitleTap(point);
-      return;
-    }
+    if (state.phase === PHASE.TITLE && this.title.tap(point)) return;
     if (state.paused || state.phase === PHASE.GAME_COMPLETE || point.y < this.waterline) return;
     this.fx.puff(point.x, point.y, 0, 5, true);
     if (point.y < this.waterline + 40) this.fx.ripple(point.x, this.waterline, 0.6);
@@ -471,40 +503,20 @@ class Game {
     }
   }
 
-  onTitleTap(point) {
-    if (point.y < TITLE.waterline) {
-      this.titleFx.sparkle(point.x, point.y, 8);
-      return;
-    }
-    this.titleFx.puff(point.x, point.y, 0, 5, true);
-  }
-
   onPlayHover(on) {
-    if (state.phase !== PHASE.TITLE) return;
-    this.playAnim.hoverTarget = on ? 1 : 0;
-    if (on) this.audio.play('bloop');
+    if (state.phase === PHASE.TITLE) this.title.hover(on);
   }
 
   onPlayPress() {
-    if (state.phase !== PHASE.TITLE) return;
-    this.playAnim.press = 1;
+    if (state.phase === PHASE.TITLE) this.title.press();
   }
 
-  // Play: the button pops, bubbles and sparkles burst out, the game begins.
+  // Play: the button pops, the logo clears away and the game begins.
   pressPlay() {
-    if (state.phase !== PHASE.TITLE || !assets.title) return;
-    const { x, y, r } = TITLE.play;
+    if (state.phase !== PHASE.TITLE || !this.title.armed) return;
     this.audio.init();
     this.audio.resume();
-    this.playAnim.burst = 0.001;
-    this.playAnim.press = 1;
-    for (let i = 0; i < 10; i += 1) {
-      const a = (i / 10) * Math.PI * 2;
-      this.titleFx.puff(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.8, Math.cos(a), 2, true);
-    }
-    this.titleFx.sparkle(x, y - r * 0.4, 14);
-    this.audio.play('splashSmall');
-    this.audio.play('cheer');
+    this.title.leave();
     this.start();
   }
 
@@ -840,7 +852,7 @@ class Game {
       popo.waveAngle = 0;
     }
     this.raftRippleIn -= dt;
-    if (this.raftRippleIn <= 0 && state.phase !== PHASE.TITLE) {
+    if (this.raftRippleIn <= 0) {
       this.raftRippleIn = 1.4 + Math.random() * 1.4;
       this.fx.ripple(Math.random() < 0.5 ? left + 8 : right - 8, this.waterline + 4, 0.55);
     }
@@ -925,30 +937,8 @@ class Game {
     ctx.drawImage(c, x0, top);
   }
 
-  // Bubbles and splashes for the title banner. Also runs while it fades out after Play.
-  updateTitle(dt) {
-    this.titleFx.update(dt);
-    const pa = this.playAnim;
-    const { x: px, y: py } = TITLE.play;
-    pa.hover += (pa.hoverTarget - pa.hover) * Math.min(1, dt * 10);
-    pa.press = Math.max(0, pa.press - dt * 4);
-    if (pa.burst > 0) pa.burst += dt;
-    pa.bubbleIn -= dt;
-    if (pa.bubbleIn <= 0) {
-      pa.bubbleIn = 0.28 + Math.random() * 0.3;
-      this.titleFx.puff(px + (Math.random() - 0.5) * 150, py + 70, 0, 1);
-    }
-    this.titleSplashIn -= dt;
-    if (this.titleSplashIn <= 0) {
-      this.titleSplashIn = 0.9 + Math.random() * 1.1;
-      const s = TITLE.splash;
-      this.titleFx.splash(s.left + Math.random() * (s.right - s.left), s.y, false);
-    }
-    if (state.phase !== PHASE.TITLE) this.titleFade = Math.max(0, this.titleFade - dt / 0.7);
-  }
-
   update(dt) {
-    if (state.phase === PHASE.TITLE || this.titleFade > 0) this.updateTitle(dt);
+    this.title.update(dt);
     clock.update(dt);
     this.popo.update(dt);
     this.fx.update(dt);
@@ -958,6 +948,8 @@ class Game {
     this.updateDialogue(dt);
     this.updateDelivery(dt);
     if (this.ending) this.updateEnding(dt);
+    this.updateFliers(dt);
+    this.updateConfetti(dt);
     this.updateStoryFx(dt);
     this.watchFrameRate(dt);
 
@@ -1004,6 +996,8 @@ class Game {
     if (this.strays.some((f) => f.gone)) this.strays = this.strays.filter((f) => !f.gone);
     if (this.ambient.some((f) => f.gone)) this.ambient = this.ambient.filter((f) => !f.gone);
     for (const f of this.ambient) f.update(dt, this.area);
+    if (this.deep.some((d) => d.gone)) this.deep = this.deep.filter((d) => !d.gone);
+    for (const d of this.deep) d.update(dt);
     if (state.phase === PHASE.PUZZLE_READY || state.phase === PHASE.DRAGGING) this.placeHandle();
     this.updateHint(dt);
   }
@@ -1084,113 +1078,13 @@ class Game {
     ctx.globalAlpha = 1;
   }
 
-  // The play button floats in the water: a gentle bob and sway, a breathing warm glow behind
-  // it, an occasional shine across its face, a grow on hover and a squash when pressed.
-  drawPlayButton(ctx, alpha) {
-    const img = assets.play;
-    if (!img) return;
-    const pa = this.playAnim;
-    const t = this.titleFx.t;
-    const { x, y, r } = TITLE.play;
-    const still = this.fx.reduced;
-    const bob = still ? 0 : Math.sin(t * 1.6) * 7;
-    const sway = still ? 0 : Math.sin(t * 1.1) * 0.035;
-    const breathe = still ? 1 : 1 + Math.sin(t * 2.4) * 0.025;
-    const squash = 1 - pa.press * 0.12;
-    const pop = pa.burst > 0 ? 1 + Math.sin(Math.min(1, pa.burst / 0.35) * Math.PI) * 0.18 : 1;
-    const s = breathe * (1 + pa.hover * 0.07) * pop;
-    const cy = y + bob;
-    this.ui.placePlay(x, cy, r * s);
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.globalCompositeOperation = 'screen';
-    const glow = ctx.createRadialGradient(x, cy, r * 0.6, x, cy, r * 1.9);
-    glow.addColorStop(0, `rgba(255, 210, 110, ${0.42 + 0.16 * Math.sin(t * 2.4) + pa.hover * 0.15})`);
-    glow.addColorStop(1, 'rgba(255, 210, 110, 0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(x - r * 2, cy - r * 2, r * 4, r * 4);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.translate(x, cy);
-    ctx.rotate(sway);
-    ctx.scale(s * (1 + pa.press * 0.06), s * squash);
-    const w = img.width * (r * 2 / img.height);
-    ctx.drawImage(img, -w / 2, -r, w, r * 2);
-    // shine: a soft diagonal band sweeping across the disc every few seconds
-    const sweep = (t % 3.4) / 1.1;
-    if (sweep < 1 && !still) {
-      ctx.beginPath();
-      ctx.arc(0, 0, r * 0.93, 0, Math.PI * 2);
-      ctx.clip();
-      const sx = -r * 1.6 + sweep * r * 3.2;
-      const band = ctx.createLinearGradient(sx - r * 0.35, -r, sx + r * 0.35, r);
-      band.addColorStop(0, 'rgba(255, 255, 255, 0)');
-      band.addColorStop(0.5, 'rgba(255, 255, 255, 0.38)');
-      band.addColorStop(1, 'rgba(255, 255, 255, 0)');
-      ctx.fillStyle = band;
-      ctx.fillRect(-r, -r, r * 2, r * 2);
-    }
-    ctx.restore();
-  }
-
-  drawTitle(ctx, alpha) {
-    const t = this.fx.t;
-    if (alpha >= 1) {
-      // the banner runs through the water pass, with the surface band kept still because the
-      // raft and the leaping fish sit on it; without WebGL it is drawn plainly
-      this.syncWaterCanvas();
-      const drawn = this.water.ok && this.water.render({
-        from: assets.title, to: null, mix: 0, time: this.titleFx.t, waterline: TITLE.waterline,
-        plants: [], amplitude: this.fx.reduced ? 0.35 : 1, surface: 0, seabed: TITLE.seabed,
-      });
-      this.water.show(Boolean(drawn));
-      if (!drawn) ctx.drawImage(assets.title, 0, 0, STAGE_W, STAGE_H);
-    } else {
-      ctx.globalAlpha = alpha;
-      ctx.drawImage(assets.title, 0, 0, STAGE_W, STAGE_H);
-      ctx.globalAlpha = 1;
-    }
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    this.titleFx.drawWater(ctx, 0, []);
-    ctx.restore();
-    this.drawPlayButton(ctx, alpha);
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    this.titleFx.drawFront(ctx);
-    // a warm, breathing sun glow in the corner and twinkles on the logo's snowy rim
-    ctx.globalCompositeOperation = 'screen';
-    const sun = ctx.createRadialGradient(1650, 18, 10, 1650, 18, 300);
-    sun.addColorStop(0, `rgba(255, 250, 220, ${(0.32 + Math.sin(t * 0.9) * 0.08) * alpha})`);
-    sun.addColorStop(1, 'rgba(255, 250, 220, 0)');
-    ctx.fillStyle = sun;
-    ctx.fillRect(1350, 0, STAGE_W - 1350, 320);
-    ctx.globalCompositeOperation = 'source-over';
-    TITLE.twinkles.forEach(([x, y], i) => {
-      const k = Math.max(0, Math.sin(t * 1.3 + i * 1.7)) ** 4;
-      if (k < 0.02) return;
-      const r = 4 + k * 9;
-      ctx.fillStyle = `rgba(255, 255, 255, ${k * alpha})`;
-      ctx.beginPath();
-      ctx.moveTo(x, y - r);
-      ctx.quadraticCurveTo(x, y, x + r, y);
-      ctx.quadraticCurveTo(x, y, x, y + r);
-      ctx.quadraticCurveTo(x, y, x - r, y);
-      ctx.quadraticCurveTo(x, y, x, y - r);
-      ctx.fill();
-    });
-    ctx.restore();
-  }
-
   draw() {
     const ctx = this.stage.begin();
     ctx.clearRect(0, 0, STAGE_W, STAGE_H);
-    if (state.phase === PHASE.TITLE) {
-      this.drawTitle(ctx, 1);
-      return;
-    }
     const offset = this.drawBackground(ctx);
     this.fx.drawWater(ctx, offset, state.fish);
     for (const f of this.ambient) f.draw(ctx);
+    for (const d of this.deep) d.draw(ctx);
     for (const f of this.strays) f.draw(ctx);
     for (const f of state.fish) if (!f.flying) f.draw(ctx);
     for (const f of this.leapers) f.draw(ctx);
@@ -1226,8 +1120,128 @@ class Game {
     this.drawRaftWater(ctx);
     this.drawPoof(ctx);
     this.fx.drawFront(ctx);
-    if (this.titleFade > 0) this.drawTitle(ctx, this.titleFade);
+    this.drawConfetti(ctx);
+    this.drawFliers(ctx);
+    if (this.title.visible) this.title.draw(ctx);
     this.drawCurtain();
+  }
+
+  // --- the counter ---------------------------------------------------------------------
+  // A fish that lands in the bucket pops back out as a little glowing copy of itself and arcs up
+  // to the counter with a spin, trailing sparkles, as coins fly to a game's counter. When it
+  // arrives the counter counts it with a gulp and a plink (every tenth fish, a big cheer), and
+  // when the last of a catch arrives "+3" pops up beside it. They fly on the game's clock, so a
+  // pause stops them mid-air.
+  flyToCounter(fish, batch) {
+    const reduced = this.fx.reduced;
+    this.fliers.push({
+      img: fish.img, box: fish.box, w: fish.w, h: fish.h, dir: fish.dir || 1, rare: fish.rare, batch,
+      from: this.popo.bucketPoint(), t: 0, dur: reduced ? 0.35 : 0.85, trail: 0,
+    });
+  }
+
+  updateFliers(dt) {
+    if (!this.fliers.length) return;
+    for (const fl of this.fliers) {
+      fl.t += dt;
+      fl.trail -= dt;
+      if (fl.at && fl.trail <= 0 && !this.fx.reduced) {
+        fl.trail = 0.05;
+        this.fx.sparkle(fl.at.x, fl.at.y, 1);
+      }
+    }
+    const arrived = this.fliers.filter((fl) => fl.t >= fl.dur);
+    if (!arrived.length) return;
+    this.fliers = this.fliers.filter((fl) => fl.t < fl.dur);
+    for (const fl of arrived) {
+      this.landed += 1;
+      const cheer = this.landed % 10 === 0;
+      this.ui.setCatch(this.landed, cheer ? 'cheer' : 'gulp');
+      this.audio.play(cheer ? 'cheer' : 'count');
+      fl.batch.left -= 1;
+      if (!fl.batch.left) this.ui.floatGain(fl.batch.total);
+    }
+  }
+
+  drawFliers(ctx) {
+    if (!this.fliers.length) return;
+    const to = this.ui.counterPoint();
+    for (const fl of this.fliers) {
+      const t = Math.min(1, fl.t / fl.dur);
+      const k = t * t * (3 - 2 * t);
+      const peak = { x: (fl.from.x + to.x) / 2 + 60, y: Math.min(fl.from.y, to.y) - 150 };
+      const x = (1 - k) * (1 - k) * fl.from.x + 2 * (1 - k) * k * peak.x + k * k * to.x;
+      const y = (1 - k) * (1 - k) * fl.from.y + 2 * (1 - k) * k * peak.y + k * k * to.y;
+      fl.at = { x, y };
+      // popping out of the bucket, then shrinking into the badge
+      const s = (t < 0.15 ? 0.25 + (t / 0.15) * 0.3 : 0.55 - 0.3 * k) * (fl.rare ? 1.1 : 1);
+      ctx.save();
+      ctx.translate(x, y);
+      const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, fl.w * s * 0.9);
+      glow.addColorStop(0, 'rgba(255, 240, 150, 0.75)');
+      glow.addColorStop(1, 'rgba(255, 240, 150, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(0, 0, fl.w * s * 0.9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.rotate(this.fx.reduced ? 0 : -k * Math.PI * 2 * fl.dir);
+      ctx.scale(fl.dir * s, s);
+      const [x0, y0, x1, y1] = fl.box;
+      ctx.drawImage(fl.img, x0, y0, x1 - x0, y1 - y0, -fl.w / 2, -fl.h / 2, fl.w, fl.h);
+      ctx.restore();
+    }
+  }
+
+  // --- bubble confetti (Fishing Frenzy's) ---------------------------------------------
+  // A catch bursts out of the bag as bright bubbles that fly up, slow, drift and wobble, and pop
+  // after a couple of seconds, a few at a time.
+  confettiFrom(x, y, count = 30) {
+    const colours = ['#ff7aa8', '#ffd166', '#7ee0ff', '#9cf28a', '#c9a7ff', '#ffa35c'];
+    const n = this.fx.reduced ? 8 : count;
+    for (let i = 0; i < n; i += 1) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4;
+      const v = 170 + Math.random() * 260;
+      this.confetti.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: 7 + Math.random() * 10, colour: colours[i % colours.length],
+        life: 0, span: 1.8 + Math.random() * 0.9, wob: Math.random() * Math.PI * 2 });
+    }
+  }
+
+  updateConfetti(dt) {
+    if (!this.confetti.length) return;
+    let popped = 0;
+    for (const c of this.confetti) {
+      const was = c.life;
+      c.life += dt / c.span;
+      c.vx *= 1 - Math.min(1, dt * 1.8);
+      c.vy = c.vy * (1 - Math.min(1, dt * 1.8)) - 45 * dt;
+      c.x += (c.vx + Math.sin(c.life * 9 + c.wob) * 18) * dt;
+      c.y += c.vy * dt;
+      if (was < 0.9 && c.life >= 0.9) popped += 1;
+    }
+    if (popped) this.audio.play('word');
+    this.confetti = this.confetti.filter((c) => c.life < 1);
+  }
+
+  drawConfetti(ctx) {
+    for (const c of this.confetti) {
+      const pop = c.life > 0.9 ? 1 + (c.life - 0.9) * 4 : 1;
+      const fade = c.life > 0.9 ? 1 - (c.life - 0.9) * 10 : Math.min(1, c.life * 12);
+      const r = c.r * pop;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, fade);
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = `${c.colour}77`;
+      ctx.fill();
+      ctx.lineWidth = 2.6;
+      ctx.strokeStyle = c.colour;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(c.x - r * 0.35, c.y - r * 0.35, r * 0.28, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   // --- the end screen ---------------------------------------------------------------
@@ -1266,43 +1280,7 @@ class Game {
     const x = e.x + e.pan.x;
     const y = e.y + e.pan.y;
     const r = Math.max(0, e.r);
-    const far = Math.hypot(Math.max(x, STAGE_W - x), Math.max(y, STAGE_H - y)) + 40;
-    if (r < far) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, 0, STAGE_W, STAGE_H);
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.clip('evenodd');
-      const glow = ctx.createRadialGradient(x, y, r, x, y, far);
-      glow.addColorStop(0, '#ffb347');
-      glow.addColorStop(0.18, '#ff6f61');
-      glow.addColorStop(0.45, '#d9437f');
-      glow.addColorStop(1, '#4b2a9b');
-      ctx.fillStyle = glow;
-      ctx.fillRect(0, 0, STAGE_W, STAGE_H);
-      ctx.globalAlpha = 0.08;
-      ctx.fillStyle = '#ffffff';
-      const turn = this.fx.reduced ? 0 : e.t * 0.08;
-      for (let i = 0; i < 16; i += 1) {
-        const a = turn + (i / 16) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.arc(x, y, far, a, a + Math.PI / 16);
-        ctx.closePath();
-        ctx.fill();
-      }
-      ctx.restore();
-      if (r > 1) {
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.lineWidth = 16;
-        ctx.strokeStyle = '#3b1d00';
-        ctx.stroke();
-        ctx.lineWidth = 9;
-        ctx.strokeStyle = '#fff3d6';
-        ctx.stroke();
-      }
-    }
+    drawSunburst(ctx, x, y, r, this.fx.reduced ? 0 : e.t * 0.08);
     if (e.titleAt !== undefined) this.drawTheEnd(ctx, x, Math.max(120, y - r - 115), e.t - e.titleAt, e.fade ?? 1);
   }
 

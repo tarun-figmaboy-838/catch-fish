@@ -179,6 +179,7 @@ class Fish {
 const SCHOOL_SIZE = [0.78, 0.88]; // a touch smaller than the leaping fish, so two lanes fit
 const RUSH = 3;                   // seconds a whole new school takes to rush in and settle
 const LANE_SHARE = [0.9, 1.12];   // the two lanes' paces, as shares of the level's
+const LANE_SWAY = 8;              // how far the lanes sway up and down together, px
 
 class Sea {
   constructor() {
@@ -193,7 +194,8 @@ class Sea {
   stock(keep, area, keys, { rare = false, pace = 50 } = {}) {
     const band = area.bottom - area.top;
     this.lanes.forEach((lane, i) => {
-      lane.y = area.top + band * (i + 0.5) / this.lanes.length;
+      lane.base = area.top + band * (i + 0.5) / this.lanes.length;
+      lane.y = lane.base;
       lane.speed = pace * lane.share;
     });
     const room = band / this.lanes.length;
@@ -224,11 +226,16 @@ class Sea {
     // speeds and slows together, so none gains on another
     const newcomers = school.length - keep.filter((f) => !f.gone && !f.caught && !f.leaving).length;
     if (newcomers > school.length / 2) for (const lane of this.lanes) lane.rush = RUSH;
-    // each fish floats at its own depth inside its lane, never into the next
+    // each fish floats at its own depth inside its lane, never into the next: each shoal keeps
+    // to its own depth, its fish a little above and below it, so the lane never reads as a row
     for (const f of school) {
       f.driftAmp = Math.max(0.5, Math.min(4, (room - f.h) / 2 - 1));
-      const slack = Math.max(0, (room - f.h) / 2 - f.driftAmp - 3);
-      if (f.depthShare === undefined) f.depthShare = Math.random() * 2 - 1;
+      const slack = Math.max(0, (room - f.h) / 2 - f.driftAmp - 3 - LANE_SWAY);
+      if (f.depthShare === undefined) {
+        const shoals = f.lane.shoalDepth || (f.lane.shoalDepth = {});
+        if (shoals[f.shoal] === undefined) shoals[f.shoal] = Math.random() * 1.6 - 0.8;
+        f.depthShare = Math.max(-1, Math.min(1, shoals[f.shoal] + (Math.random() - 0.5) * 0.6));
+      }
       f.depth = f.depthShare * slack;
     }
     return school;
@@ -241,7 +248,10 @@ class Sea {
   steer(fish, area, dt) {
     this.t += dt;
     const span = area.right - area.left;
+    // the lanes sway gently up and down together, so they stay apart
+    const sway = Math.sin(this.t * 0.23) * LANE_SWAY;
     for (const lane of this.lanes) {
+      if (lane.base !== undefined) lane.y = lane.base + sway;
       const rush = lane.rush > 0 ? Math.min(1, lane.rush / (RUSH * 0.6)) : 0;
       lane.rush = Math.max(0, lane.rush - dt);
       const pace = lane.speed * (1 + 0.08 * Math.sin(this.t * 0.45 + lane.phase)) * (1 + 2.6 * rush * rush * (3 - 2 * rush));
@@ -420,6 +430,66 @@ class ShadowFish {
   }
 }
 
+// Far fish: small natural fish in the haze of the deep water under the school, where the net
+// never reaches, going slowly about their business so the sea is full to its floor. They are
+// only scenery: taps and nets pass them by.
+class DeepFish {
+  constructor(area, dir, fromEdge) {
+    const keys = PopoGame.NATURAL_FISH;
+    this.dir = dir;
+    this.fish = new Fish(keys[Math.floor(Math.random() * keys.length)], 0, 0, dir, 0.46 + Math.random() * 0.14);
+    this.fish.speed = 22 + Math.random() * 22;
+    this.haze = 0.42 + Math.random() * 0.14;
+    this.fade = 1;
+    this.leaving = false;
+    this.gone = false;
+    this.place(area, !fromEdge);
+  }
+
+  place(area, anywhere) {
+    const f = this.fish;
+    const y = area.top + f.h / 2 + Math.random() * Math.max(0, area.bottom - area.top - f.h);
+    f.lane = { dir: this.dir, y };
+    f.baseY = f.y = y;
+    f.x = anywhere ? Math.random() * STAGE_W : (this.dir > 0 ? -f.w : STAGE_W + f.w);
+  }
+
+  // new waters: glide to a depth in them
+  settle(area) {
+    const f = this.fish;
+    if (f.lane.y < area.top + f.h / 2 || f.lane.y > area.bottom - f.h / 2) {
+      f.lane = { dir: this.dir, y: area.top + f.h / 2 + Math.random() * Math.max(0, area.bottom - area.top - f.h) };
+    }
+  }
+
+  leave() {
+    this.leaving = true;
+    this.fish.leaving = true;
+    this.fish.speed = Math.max(this.fish.speed, 70);
+  }
+
+  update(dt) {
+    const f = this.fish;
+    f.update(dt, { left: -f.w - 20, right: STAGE_W + f.w + 20 });
+    if (f.gone) this.gone = true;
+  }
+
+  draw(ctx) {
+    this.fish.alpha = this.haze * this.fade;
+    this.fish.draw(ctx);
+  }
+}
+
+function refreshDeep(current, count, area) {
+  const live = current.filter((d) => !d.leaving && !d.gone);
+  const staying = live.slice(0, count);
+  for (const d of staying) d.settle(area);
+  for (const d of live.slice(count)) d.leave();
+  const fresh = Array.from({ length: count - staying.length }, (_, i) =>
+    new DeepFish(area, (staying.length + i) % 2 ? -1 : 1, current.length > 0));
+  return [...current.filter((d) => d.leaving && !d.gone), ...staying, ...fresh];
+}
+
 // Keeps the shadows already swimming, sends any extra away and brings newcomers in from the
 // edges, so the set changes between levels without anything popping in or out.
 function refreshShadows(current, count, area) {
@@ -432,5 +502,5 @@ function refreshShadows(current, count, area) {
   return [...current.filter((s) => s.leaving && !s.gone), ...staying, ...fresh].sort((a, b) => b.depth - a.depth);
 }
 
-Object.assign(PopoGame, { Fish, Sea, refreshShadows });
+Object.assign(PopoGame, { Fish, Sea, refreshShadows, refreshDeep });
 })(window.PopoGame = window.PopoGame || {});

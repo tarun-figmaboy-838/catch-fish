@@ -57,9 +57,8 @@ positions, animation logic, tests). This file is how they coordinate; the user r
    same seat and shaft registration as the top-left pose, wheel grip at 12 o'clock):
    a blink (eyes closed), a happy open-mouth cheer, a thinking face (eyes up, mouth small),
    and a gasp. File: `popo-faces.png`. These give the catch and the torn net real expressions.
-2. **Title banner** `title.png`, 1672 × 941, for "Popo's Parallelogram Net": the current scene
-   (raft with the arched winch, the net as a parallelogram, Arctic water) with the title at
-   the top right. Keep a clear circle for the play button at (836, 772), radius 112.
+2. Done: the banner is now the live lake with the user's painted "Fishing Frenzy 2" logo
+   (`asset/fishing-frenzy-2-logo.png`); the old title banner is no longer used.
 3. **Rare fish** `fish-rare.png`, a 2 × 3 grid like `asset/fish-natural-1.png` (1448 × 1086):
    six golden or jewel-patterned fish, same size and style as the natural fish, facing right.
    They become the final level's prize school.

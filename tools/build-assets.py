@@ -8,6 +8,7 @@ winch, net and panel art in assets/generated/ is used whole, as it is (see
 tools/generated-art-prompts.txt); the game loads WebP copies of it from assets/generated-web/,
 the same pictures at the same size in about a fifth of the bytes. `--generated` rebuilds only
 those copies (run it whenever a file in assets/generated/ changes; tests/assets.py checks).
+`--logo` rebuilds only the banner's logo.
 
 Requires Pillow (pip install Pillow).
 """
@@ -31,7 +32,6 @@ BACKGROUNDS = [
     'bg6, 2026 at 02_26_06 PM-3.png',
     'bg6, 2026 at 02_26_08 PM-4.png',
 ]
-TITLE = 'title-banner.png'
 PLAY_BUTTON = 'play-button.png'
 HINT_HAND = 'hint-hand.png'
 # The fish Popo nets: natural cartoon fish, six to a sheet (2 columns x 3 rows), sliced by grid
@@ -225,6 +225,29 @@ def build_props():
     cell.save(os.path.join(OUT, 'sprites', 'popo-props.webp'), lossless=True)
 
 
+# The banner's logo (painted, transparent), trimmed and scaled for the stage. `--logo` rebuilds
+# it alone and prints the top of its snow for LOGO_TOP in src/title.js (the fish peek over it).
+LOGO = 'fishing-frenzy-2-logo.png'
+LOGO_WIDTH = 1500
+
+
+def build_logo():
+    art = Image.open(os.path.join(SRC, LOGO)).convert('RGBA')
+    box = art.getchannel('A').point(lambda v: 255 if v > 8 else 0).getbbox()
+    art = art.crop((box[0] - 6, box[1] - 6, box[2] + 6, box[3] + 6))
+    logo = art.resize((LOGO_WIDTH, round(art.height * LOGO_WIDTH / art.width)), Image.LANCZOS)
+    path = os.path.join(OUT, 'sprites', 'logo.webp')
+    logo.save(path, 'WEBP', quality=88, alpha_quality=92, method=6)
+    alpha = logo.getchannel('A').load()
+    top = []
+    for x in range(40, logo.width - 40, 30):
+        y = next((y for y in range(logo.height) if alpha[x, y] > 140), None)
+        if y is not None:
+            top.append([x, y])
+    print('logo', logo.size, os.path.getsize(path) // 1024, 'KB')
+    print('LOGO_TOP =', json.dumps(top).replace(' ', ''))
+
+
 # The generated art the game draws on the canvas (the panel is the CSS cards' background and is
 # loaded as it is).
 GENERATED = ['popo-operating', 'winch-arched', 'rope', 'rope-connector', 'net']
@@ -251,6 +274,9 @@ def main():
     if '--generated' in sys.argv[1:]:
         build_generated()
         return
+    if '--logo' in sys.argv[1:]:
+        build_logo()
+        return
     build_generated()
     os.makedirs(os.path.join(OUT, 'backgrounds'), exist_ok=True)
     os.makedirs(os.path.join(OUT, 'sprites'), exist_ok=True)
@@ -259,7 +285,6 @@ def main():
         im.save(os.path.join(OUT, 'backgrounds', f'location-{i}.webp'), 'WEBP', quality=86, method=6)
         water_mask(im).save(os.path.join(OUT, 'backgrounds', f'water-{i}.png'), optimize=True)
         print('background', i, im.size)
-    Image.open(os.path.join(SRC, TITLE)).convert('RGB').save(os.path.join(OUT, 'backgrounds', 'title.webp'), 'WEBP', quality=86, method=6)
     hand = Image.open(os.path.join(SRC, HINT_HAND)).convert('RGBA')
     hand.thumbnail((180, 216), Image.LANCZOS)
     hand.save(os.path.join(OUT, 'sprites', 'hint-hand.webp'), 'WEBP', quality=92, method=6)
@@ -268,6 +293,7 @@ def main():
     play.save(os.path.join(OUT, 'sprites', 'play.webp'), 'WEBP', quality=92, method=6)
 
     build_props()
+    build_logo()
     fish = build_fish_atlas()
     natural = build_natural_fish()
 
@@ -283,8 +309,6 @@ def main():
             with open(os.path.join(OUT, 'backgrounds', f'water-{i}.png'), 'rb') as img:
                 fh.write("  'data:image/png;base64," + base64.b64encode(img.read()).decode() + "',\n")
         fh.write('];\n')
-        with open(os.path.join(OUT, 'backgrounds', 'title.webp'), 'rb') as img:
-            fh.write("PopoGame.TITLE_DATA = 'data:image/webp;base64," + base64.b64encode(img.read()).decode() + "';\n")
         with open(os.path.join(OUT, 'sprites', 'play.webp'), 'rb') as img:
             fh.write("PopoGame.PLAY_DATA = 'data:image/webp;base64," + base64.b64encode(img.read()).decode() + "';\n")
 

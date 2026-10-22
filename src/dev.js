@@ -13,7 +13,7 @@ function game() {
 // Leaves the title (as Play would) without starting the opening story.
 function begin(g) {
   if (state.phase === PHASE.TITLE) {
-    g.titleFade = 0;
+    g.title.dismiss();
     g.audio.init();
     g.audio.resume();
     g.audio.startMusic();
@@ -39,10 +39,8 @@ function level(index) {
 const JUMPS = [
   ['Title', () => {
     const g = game();
-    g.reset();
     g.audio.stopMusic();
-    g.ui.showStart();
-    g.showIdleScene();
+    g.title.replay();
   }],
   ['Intro', () => { const g = game(); begin(g); g.restart(); }],
   ...LEVELS.map((lv, i) => [`L${i + 1}`, () => level(i)]),

@@ -566,22 +566,45 @@ html, body {
 .step[hidden] { display: none; }
 .step:focus { outline: none; }
 .step:focus-visible { box-shadow: 0 0 0 0.3em rgba(255, 255, 255, 0.9), 0 0 0 0.6em var(--amber); }
-#instruction-text { white-space: nowrap; }
-/* the catch so far (top left): the narration plate's navy and gold, a fish and its number, and
-   below them a dot for each net, filled when done, ringed for the one being fished */
-.catch { font-size: 1.35em; grid-column: 1; grid-row: 1; justify-self: start; display: inline-flex; flex-direction: column; align-items: center; gap: 0.25em;
-  padding: 0.35em 0.9em 0.45em; border-radius: 0.9em; background: rgba(8, 36, 84, 0.62); border: 0.1em solid rgba(255, 214, 140, 0.35);
-  box-shadow: 0 0.4em 1.2em rgba(0, 20, 60, 0.3); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); pointer-events: none; }
-.catch-row { display: inline-flex; align-items: center; gap: 0.3em; }
-.catch-icon { width: 2.4em; height: auto; }
-.catch-count { font-size: 2.8em; font-weight: 700; color: #ffd166; line-height: 1; min-width: 1.2em; text-shadow: 0 0.06em 0.14em rgba(0, 0, 0, 0.4); }
-.nets { display: inline-flex; gap: 0.35em; }
-.nets i { width: 0.8em; height: 0.8em; border-radius: 50%; background: rgba(255, 255, 255, 0.28); }
-.nets i.done { background: #ffd166; box-shadow: 0 0 0 0.12em #3b1d00; }
-.nets i.now { background: transparent; box-shadow: inset 0 0 0 0.16em #ffd166; animation: net-now 1.4s ease-in-out infinite; }
-@keyframes net-now { 50% { transform: scale(1.3); } }
-.catch.say { animation: catch-bump 0.4s cubic-bezier(0.2, 1.8, 0.4, 1); }
-@keyframes catch-bump { 40% { transform: scale(1.14); } } /* one line, never two (UI.fitInstruction fits it) */
+#instruction-text { white-space: nowrap; } /* one line, never two (UI.fitInstruction fits it) */
+/* the catch so far (top left), a chunky game counter: Drop Net's sunny face, dark outline and
+   lip, a dark badge (with the same lip) holding a gold fish that wags now and then, the number
+   in the dark ink. A fish arriving (Game.flyToCounter) makes the pill gulp, the
+   badge fish flip and the number pop; "+3" after a catch pops up beside it and drifts off;
+   every tenth fish gets a big gold wobble. */
+.catch { font-size: 1.35em; grid-column: 1; grid-row: 1; justify-self: start; position: relative; display: inline-flex; flex-direction: column; align-items: flex-start; gap: 0.65em; pointer-events: none; }
+.catch-row { position: relative; display: inline-flex; align-items: center; height: 3.4em; padding: 0 1.1em 0 3.5em; margin-left: 0.6em; border-radius: 999px; border: 0.16em solid #3b1d00;
+  background: linear-gradient(180deg, #fff27a 0%, #ffd23f 45%, #ffa51f 100%);
+  box-shadow: 0 0.22em 0 #3b1d00, 0 0.5em 1em rgba(0, 20, 60, 0.3), inset 0 0.14em 0 rgba(255, 255, 255, 0.8), inset 0 -0.2em 0 rgba(214, 100, 0, 0.35); }
+.catch-badge { position: absolute; left: -0.55em; top: 50%; width: 3.9em; height: 3.9em; margin-top: -1.95em; border-radius: 50%; display: grid; place-items: center;
+  background: radial-gradient(circle at 40% 32%, #6a3d15, #3b1d00 70%); border: 0.16em solid #3b1d00;
+  box-shadow: 0 0.22em 0 #1f0e00, 0 0.5em 1em rgba(0, 20, 60, 0.3), inset 0 0.12em 0 rgba(255, 255, 255, 0.22); }
+.catch-icon { width: 76%; height: auto; transform-origin: 62% 50%; animation: fish-wag 3.4s ease-in-out infinite; }
+.catch-count { font-size: 2.5em; font-weight: 800; color: #3b1d00; line-height: 1; min-width: 1.3em; text-align: center; font-variant-numeric: tabular-nums; }
+@keyframes fish-wag { 0%, 84%, 100% { transform: rotate(0); } 88% { transform: rotate(-14deg); } 92% { transform: rotate(12deg); } 96% { transform: rotate(-6deg); } }
+.catch.gulp .catch-row { animation: gulp 0.45s cubic-bezier(0.2, 1.8, 0.4, 1); }
+.catch.gulp .catch-icon { animation: fish-flip 0.55s ease-out; }
+.catch.gulp .catch-count { animation: count-pop 0.45s cubic-bezier(0.2, 1.8, 0.4, 1); }
+@keyframes gulp { 35% { transform: scale(1.12, 0.88); } 70% { transform: scale(0.96, 1.06); } }
+@keyframes fish-flip { 45% { transform: translateY(-0.45em) rotate(-30deg) scale(1.25); } 75% { transform: translateY(0.05em) rotate(8deg) scale(0.95); } }
+@keyframes count-pop { 0% { transform: translateY(0.45em) scale(0.5); opacity: 0.3; } 60% { transform: translateY(-0.12em) scale(1.3); opacity: 1; } }
+.catch .gain { position: absolute; left: 100%; top: -0.2em; margin-left: 0.4em; font-size: 2.3em; font-weight: 800; color: #fff27a; white-space: nowrap;
+  -webkit-text-stroke: 0.14em #3b1d00; paint-order: stroke fill; text-shadow: 0 0.09em 0 #3b1d00; animation: gain 1.5s cubic-bezier(0.2, 1.6, 0.4, 1) forwards; }
+@keyframes gain {
+  0% { transform: translateY(0.6em) scale(0.3) rotate(-14deg); opacity: 0; }
+  25% { transform: translateY(0) scale(1.2) rotate(8deg); opacity: 1; }
+  45% { transform: scale(0.95) rotate(-4deg); }
+  75% { transform: translateY(-0.25em) scale(1) rotate(0); opacity: 1; }
+  100% { transform: translateY(-1.3em) scale(0.85); opacity: 0; }
+}
+.catch.cheer .catch-row { animation: cheer 0.95s cubic-bezier(0.2, 1.6, 0.4, 1); }
+.catch.cheer .catch-badge { animation: badge-spin 0.95s cubic-bezier(0.2, 1.4, 0.4, 1); }
+@keyframes cheer {
+  20% { transform: scale(1.28) rotate(-7deg); filter: brightness(1.25) drop-shadow(0 0 0.7em #fff27a); }
+  45% { transform: scale(1.1) rotate(6deg); filter: brightness(1.15) drop-shadow(0 0 0.5em #fff27a); }
+  70% { transform: scale(1.04) rotate(-2deg); }
+}
+@keyframes badge-spin { 60% { transform: rotate(360deg) scale(1.15); } 100% { transform: rotate(360deg); } }
 .words .w { display: inline-block; visibility: hidden; }
 .words .w.in { visibility: visible; animation: word-in 0.32s cubic-bezier(0.2, 1.8, 0.4, 1); }
 .words .w.em.in { animation: word-boing 0.55s cubic-bezier(0.2, 1.8, 0.4, 1); }
@@ -594,3 +617,4 @@ html, body {
 .ang { position: relative; display: inline-block; width: 0.66em; height: 0.66em; margin-right: 0.07em; vertical-align: 0; }
 .ang svg { display: block; width: 100%; height: 100%; overflow: visible; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .ang-sign { position: absolute; inset: 0; opacity: 0; overflow: hidden; font-size: 0.5em; }
+

@@ -112,7 +112,6 @@ const STORY = {
   ],
   // Popo only reacts, as he does in Fishing Frenzy (his lines are his recordings from there):
   // a catch, a wrong net, a right net that came up empty, the golden school, and the end
-  catch: { who: 'popo', text: '*Great* catch!', cue: { word: 0, do: 'hop' } },
   oops: { who: 'popo', text: 'Whoopsie Doopsie!' },
   empty: { who: 'popo', text: 'Huh?!' },
   golden: { who: 'popo', text: '*Woah!*', cue: { word: 0, do: 'hop' } },
