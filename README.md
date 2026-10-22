@@ -8,8 +8,8 @@ presses Drop Net when fish swim under it. A right net locks with its praise on t
 nets whoever is under it as it lands, closes into a bag (a potli) around them as it is hauled
 up, and the fish hop into the bucket; one that lands on nothing comes up empty and can be
 dropped again. A wrong net goes down all the same, but the catch thrashes, tears through the
-bag and drops back into the sea. Eight nets teach the properties one by one, then a final
-card: "Parallelogram Pro!" with the five properties named one at a time.
+bag and drops back into the sea. Eight nets teach the properties one by one, then the end
+screen of Fishing Frenzy: a circle closes in on Popo over a warm sunburst and "The End" pops in.
 
 ## Run
 
@@ -40,9 +40,13 @@ never change, so a year-long cache would keep old art against new code.
   Popo lets the net down and it opens into its first frame → level 1. After each catch the fish
   hop into the bucket, Popo winds the empty net up into its bundle, rows on when the next level
   is in new waters (levels 1–2, 3–4, 5–6 and 7–8 are in the four locations), and lets the net
-  down in its new shape as the next school swims in. After level 8, the final card with Play
-  Again, which goes straight to level 1. The page gets a `popo:complete` event (and a
-  `postMessage` when framed).
+  down in its new shape as the next school swims in. After level 8, Popo's "Wow! What a
+  catch!" and the end screen (`theEnd` in `src/sequences.js`, drawn on `#curtain` by
+  `Game.drawCurtain`), as in Fishing Frenzy: a circle closes in on Popo and his raft over the
+  live scene and glides with them to the middle, everything around it a warm, slowly turning
+  sunburst; "The End" pops in letter by letter while Popo laughs, then Play Again springs in.
+  Play Again closes the circle, sets the game up afresh out of sight and opens it again on
+  level 1. The page gets a `popo:complete` event (and a `postMessage` when framed).
 - **Phases** (`src/state.js`): one phase at a time decides what input is allowed: title,
   intro, puzzleReady, dragging, netLowering, catching, netRaising, netBreaking,
   levelComplete, transitioning, gameComplete. Pause is a flag over the top.
@@ -89,8 +93,11 @@ never change, so a year-long cache would keep old art against new code.
   the water. A right net that caught nothing comes up empty and Drop Net comes back (the frame
   stays right). The fish the net missed stay and swim on into the next level (rowing to new
   waters, they come along), joined by newcomers; for the golden final school they swim off out
-  of the sea as the golden fish swim in behind them. No fish ever vanishes or pops into view.
-- **Hints.** Left alone, the first hint reads the prompt again, word by word; on the first net
+  of the sea as the golden fish swim in behind them. No fish ever vanishes or pops into view; a
+  whole new school (the first, the golden one) rushes in, its lanes fast for a moment, so the
+  sea fills at once.
+- **Hints.** Left alone, the first hint reads the prompt again, each word bouncing in place as
+  it is said; on the first net
   the hand also shows the drag, once; later hints nudge the plate and swell the measurements
   (the supplementary level shows 65° + ? = 180° once the child starts), so the game teaches
   rather than solves itself. No hint says whether the net is right; Drop Net does.
@@ -98,13 +105,13 @@ never change, so a year-long cache would keep old art against new code.
   and the narrator's lines sit on one translucent navy plate with a faint gold rim, white
   text and the key word in gold, fitted to the words. The instruction is always one line (a
   long one shrinks to fit) and comes word by word in time with its voice: each word pops in, a
-  stressed one boings, and the plate bounces as each new sentence starts. The final card's
-  lessons come the same way. ∠ is drawn, since Fredoka has no angle sign. Popo's own lines are its cream speech bubble with dark ink and an orange key
+  stressed one boings, and the plate bounces as each new sentence starts. ∠ is drawn, since
+  Fredoka has no angle sign. Popo's own lines are its cream speech bubble with dark ink and an orange key
   word, growing word by word with its line breaks pinned. Sound and pause are its round orange
   icon buttons. Drop Net, the one action, is a chunky game button bottom right: a sunny face
   with dark-brown outline, label (about 10:1 contrast) and a lip it presses down onto, the net
   icon in a badge; it pops in and a shine sweeps it now and then.
-  The pause and final cards' buttons match it.
+  The pause card's buttons match it, and the end screen's Play Again is the same button.
 - **The winch** (`src/winch.js`): the generated arched machine (`assets/generated/winch-arched.png`)
   drawn whole at one scale on the raft's deck, its end pulley out over the water where the
   net hangs. Popo (`assets/generated/popo-operating.png`, four poses of him turning a
@@ -153,7 +160,8 @@ never change, so a year-long cache would keep old art against new code.
   backgrounds and their water masks, the raft, the title fish and the natural fish (blue and
   teal ones are left out because they vanish against the water), and the WebP copies of the
   generated art; `--generated` rebuilds only those (run it whenever `assets/generated/` changes).
-- `tools/build-voice.py` – records the voice lines into `src/voice-data.js` (below).
+- `tools/build-voice.py` – records the voice lines into `src/voice-data.js` (below);
+  `tools/build-popo-voice.py` adds Popo's Fishing Frenzy clips.
 - `tools/build-rowing.py` – Popo's paddling rig (`src/rowing.js`, `src/rowing-data.js`);
   `tools/build-rowing-cycle.py` pre-renders one stroke of it into
   `assets/sprites/popo-row-cycle.webp`, which the game crossfades through while Popo rows
@@ -161,11 +169,17 @@ never change, so a year-long cache would keep old art against new code.
 
 ## Voice-overs
 
-The narrator and Popo are voiced. Each clip is keyed by speaker and on-screen text (see
+The narrator and Popo are voiced. Popo speaks as he does in Fishing Frenzy, in his voice from
+there: he never gives instructions, he only reacts in a few comic words ("*Great* catch!",
+"Whoopsie Doopsie!" when a wrong net tears, "Huh?!" when a right net comes up empty, "*Woah!*"
+for the golden school, "*Wow!*" "What a *catch!*" at the end). His clips are his Fishing Frenzy
+studio recordings (Gemini's Puck, Indian-English accent, a little deeper), copied by key out of
+Fishing Frenzy's voice data by `tools/build-popo-voice.py`, which `tools/build-voice.py` runs
+after writing the file. Each clip is keyed by speaker and on-screen text (see
 `voiceKey` in `src/audio.js`), so the prompt, praise, hint and story lines in `src/levels.js`
 find their recordings (lines with symbols, like ∠A = 70°, carry a spoken form in the script); the words of a line appear as they are spoken, the music ducks under
-the voice, and a line without a clip falls back to the synthesised blips. The shipped clips
-were recorded locally with Kokoro-82M:
+the voice, and a line without a clip falls back to the synthesised blips. The narrator's
+clips were recorded locally with Kokoro-82M:
 
 ```
 python3 -m venv ~/.cache/popo-voice311   # Python 3.10+
@@ -186,8 +200,8 @@ Headless Chromium through Python Playwright (`pip install playwright pillow`):
   mended with a hint, the corner stays on the stop it's dragged to (also through a mid-drag
   resize) with nothing giving the answer away, a right net dropped over no fish comes up empty
   and can go again, Drop Net locks the answer with its praise, a drop timed for fish under the
-  net catches some, waters change, pause freezes the game, the final card appears, Play Again
-  starts over.
+  net catches some, waters change, pause freezes the game, the end screen closes in with The
+  End, and Play Again closes and reopens it on the first net.
 - `python3 tests/geometry.py` – every level's property holds exactly at the solved position and
   fails at the start, the start is a simple frame well away from its place, the track runs
   through the place, Drop Net passes at that stop and at no other and the numbers on the net
@@ -196,8 +210,8 @@ Headless Chromium through Python Playwright (`pip install playwright pillow`):
 - `python3 tests/assets.py` – the WebP copies in `assets/generated-web/` match the generated
   art they were made from.
 - `python3 tests/rowing.py` – the paddling frames and a row to the next waters at three sizes.
-- `python3 tests/ui_layout.py` – the HUD, pause and final cards stay inside the stage at
-  three sizes, and the sound and pause controls work.
+- `python3 tests/ui_layout.py` – the HUD, the pause card and the end screen stay inside the
+  stage at three sizes, and the sound and pause controls work.
 - `python3 tests/machine_animation.py` – the operating poses are whole, follow the drum both
   ways, and every level's corner can be dragged to its place clear of the raft.
 

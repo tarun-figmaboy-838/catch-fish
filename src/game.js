@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, Sea, refreshShadows, LOCATIONS, LEVELS, schoolFor, Popo, Winch, Net, TUCK, opening, startLevels, dropNet, Cancelled, STAGE_W, STAGE_H, SCENE_SHIFT, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
+const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, Sea, refreshShadows, LOCATIONS, LEVELS, schoolFor, Popo, Winch, Net, TUCK, opening, startLevels, dropNet, closeCurtain, Cancelled, STAGE_W, STAGE_H, SCENE_SHIFT, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
 
 const HINT_REPEAT = 7;    // seconds of idling between hints once one has been shown
 const NET_CLEARANCE = 40; // the net's bottom edge hangs this far above the water
@@ -46,6 +46,9 @@ function readingTimes(words, pace) {
   });
 }
 
+// Twinkles either side of The End on the end screen, from its middle.
+const ENDING_TWINKLES = [[-420, -50], [-370, 40], [-440, 95], [400, -60], [440, 30], [370, 100], [-300, -110]];
+
 // The title banner: its water surface, sand line, the play button floating in its water, where
 // the hooked fish splashes, and sparkle points along the logo's snowy edges.
 const TITLE = {
@@ -76,8 +79,9 @@ class Game {
     this.leapers = [];
     this.sea = new Sea();  // the school's lanes in these waters
     this.strays = [];      // fish swimming out of the sea as the golden school swims in
-    this.delivery = null;  // the words of the instruction plate (or final card) still to appear
+    this.delivery = null;  // the words of the instruction plate still to appear
     this.netRight = false; // the frame has been proven right this level; only the timing is left
+    this.ending = null;    // the end screen: its circle, the scene's pan, The End (see theEnd)
     this.handShown = false;
     this.poof = null;
     this.ambient = [];
@@ -125,7 +129,12 @@ class Game {
     opening(this);
   }
 
+  // From the end screen, the circle closes and opens again on the first net (closeCurtain).
   playAgain() {
+    if (this.ending) {
+      if (!this.ending.closing) closeCurtain(this);
+      return;
+    }
     this.reset();
     startLevels(this);
   }
@@ -140,7 +149,7 @@ class Game {
     this.audio.setTravel(false);
     this.transition = null;
     this.ui.showPause(false);
-    this.ui.showComplete(false);
+    this.ui.showAgain(false);
     this.ui.hideHand();
     this.ui.showHandle(false);
     this.ui.setDrop('hidden');
@@ -153,6 +162,7 @@ class Game {
     this.net = new Net();
     this.net.textScale = this.labelScale();
     this.net.arrowGap = this.ui.arrowGap() / this.stage.scale;
+    this.net.sharpRes = this.textureRes();
     // until Popo lets it down, the net hangs wound up in a bundle under the boom's pulley
     this.net.visible = true;
     this.net.furl = 1;
@@ -166,6 +176,7 @@ class Game {
     this.hint = null;
     this.drag = null;
     this.netRight = false;
+    this.ending = null;
     this.endLine();
     this.instruct('');
     // a restart from the pause card must hand back the HUD and the net's corner
@@ -275,16 +286,12 @@ class Game {
   }
 
   // --- text delivery ------------------------------------------------------------
-  // The instruction plate (a prompt, praise or hint) and the final card's lessons come word by
-  // word, each sentence on a line of its own (see UI.layWords): in time with the voice when the
-  // line is read aloud, or at a reading pace when it isn't. Words pop in, stressed ones boing,
-  // and the plate bounces as each new line starts. Returns how long that takes, in seconds.
+  // The instruction plate (a prompt, praise or hint) comes word by word, in time with the voice
+  // when the line is read aloud, or at a reading pace when it isn't. Words pop in, stressed ones
+  // boing, and the plate bounces as each new sentence starts. Returns how long that takes, in
+  // seconds.
   instruct(text, { voice = true, pace = READ_PACE } = {}) {
     return this.deliver(this.ui.setInstruction(text), text, voice, pace);
-  }
-
-  teach(text) {
-    return this.deliver(this.ui.setLesson(text), text, true, READ_PACE);
   }
 
   deliver(words, text, voice, pace) {
@@ -297,12 +304,27 @@ class Game {
     return Math.max(seconds, times[times.length - 1] + pace);
   }
 
+  // The prompt read again (the first hint): its words stay on the plate and each gives a little
+  // bounce as it is said, so the child can follow along. (A prompt still arriving is delivered
+  // afresh instead.)
+  reread(text) {
+    const shown = this.ui.delivered;
+    if (this.delivery || !shown || shown.plate !== this.ui.el.instruction || !shown.words.length) {
+      this.instruct(text);
+      return;
+    }
+    const seconds = this.speak(text);
+    const times = seconds ? spokenTimes(shown.words, seconds) : readingTimes(shown.words, READ_PACE);
+    this.delivery = { times, next: 0, t: 0, bounce: true };
+  }
+
   updateDelivery(dt) {
     const d = this.delivery;
     if (!d) return;
     d.t += dt;
     while (d.next < d.times.length && d.t >= d.times[d.next]) {
-      this.ui.showWord(d.next);
+      if (d.bounce) this.ui.bounceWord(d.next);
+      else this.ui.showWord(d.next);
       d.next += 1;
     }
     if (d.next >= d.times.length) this.delivery = null;
@@ -509,11 +531,18 @@ class Game {
     this.ui.setScale(this.stage.scale);
     this.net.textScale = this.labelScale();
     this.net.arrowGap = this.ui.arrowGap() / this.stage.scale;
+    this.net.sharpRes = this.textureRes();
     // keep the bubble, the corner and the hint on their marks even while paused
     if (this.dialogue && this.dialogue.who !== 'narrator') this.placeSpeech();
     this.placeHandle();
     this.ui.showRotateHint(this.stage.portrait);
     this.syncWaterCanvas();
+  }
+
+  // Texture pixels per stage pixel the screen can show: no more than it has (a small or
+  // standard screen needs one), at most two.
+  textureRes() {
+    return Math.max(1, Math.min(2, this.stage.scale * this.stage.dpr));
   }
 
   // The net's labels are drawn in stage pixels; on a small screen the stage shrinks, so they
@@ -570,7 +599,7 @@ class Game {
       this.net.hintPulse = 2.4;
     }
     if (this.hintShown) this.ui.pulseInstruction();
-    else this.instruct(LEVELS[state.level].prompt);
+    else this.reread(LEVELS[state.level].prompt);
     this.hintShown = true;
   }
 
@@ -920,6 +949,7 @@ class Game {
     if (this.poof && (this.poof.t += dt) > 0.6) this.poof = null;
     this.updateDialogue(dt);
     this.updateDelivery(dt);
+    if (this.ending) this.updateEnding(dt);
     this.updateStoryFx(dt);
     this.watchFrameRate(dt);
 
@@ -1189,6 +1219,135 @@ class Game {
     this.drawPoof(ctx);
     this.fx.drawFront(ctx);
     if (this.titleFade > 0) this.drawTitle(ctx, this.titleFade);
+    this.drawCurtain();
+  }
+
+  // --- the end screen ---------------------------------------------------------------
+  // Its idle life, as in Fishing Frenzy: the rays turn, the letters bob, the twinkles glint and
+  // Popo laughs on a loop. Reopening (Play Again), the circle widens until the new game is in
+  // full view.
+  updateEnding(dt) {
+    const e = this.ending;
+    e.t += dt;
+    if (e.opening) {
+      e.r += dt * (this.fx.reduced ? 5200 : 2600);
+      if (e.r > 1950) this.ending = null;
+      return;
+    }
+    if (e.laugh && (e.laughIn -= dt) <= 0) {
+      e.laughIn = 1.7;
+      this.popo.react('laugh', 1.6);
+      if (e.giggles > 0) {
+        e.giggles -= 1;
+        this.audio.play('giggle');
+      }
+    }
+  }
+
+  // The curtain over the scene: a warm sunburst everywhere but the circle, slowly turning rays, a
+  // dark and cream frame round the circle, and The End above it. The scene itself is moved
+  // (panScene) so what's in the circle glides with it.
+  drawCurtain() {
+    const e = this.ending;
+    if (!e && !this.curtainUp) return;
+    const ctx = this.stage.beginCurtain();
+    ctx.clearRect(0, 0, STAGE_W, STAGE_H);
+    this.curtainUp = Boolean(e);
+    this.ui.panScene(e ? e.pan.x : 0, e ? e.pan.y : 0);
+    if (!e) return;
+    const x = e.x + e.pan.x;
+    const y = e.y + e.pan.y;
+    const r = Math.max(0, e.r);
+    const far = Math.hypot(Math.max(x, STAGE_W - x), Math.max(y, STAGE_H - y)) + 40;
+    if (r < far) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, STAGE_W, STAGE_H);
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.clip('evenodd');
+      const glow = ctx.createRadialGradient(x, y, r, x, y, far);
+      glow.addColorStop(0, '#ffb347');
+      glow.addColorStop(0.18, '#ff6f61');
+      glow.addColorStop(0.45, '#d9437f');
+      glow.addColorStop(1, '#4b2a9b');
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+      ctx.globalAlpha = 0.08;
+      ctx.fillStyle = '#ffffff';
+      const turn = this.fx.reduced ? 0 : e.t * 0.08;
+      for (let i = 0; i < 16; i += 1) {
+        const a = turn + (i / 16) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.arc(x, y, far, a, a + Math.PI / 16);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+      if (r > 1) {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.lineWidth = 16;
+        ctx.strokeStyle = '#3b1d00';
+        ctx.stroke();
+        ctx.lineWidth = 9;
+        ctx.strokeStyle = '#fff3d6';
+        ctx.stroke();
+      }
+    }
+    if (e.titleAt !== undefined) this.drawTheEnd(ctx, x, Math.max(120, y - r - 115), e.t - e.titleAt, e.fade ?? 1);
+  }
+
+  // "The End" in big outlined gold letters, each popping in a moment after the last and then
+  // bobbing, with twinkles either side.
+  drawTheEnd(ctx, cx, cy, t, alpha) {
+    const text = 'The End';
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = '700 168px Fredoka, "Arial Rounded MT Bold", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    const widths = [...text].map((ch) => ctx.measureText(ch).width);
+    let left = cx - widths.reduce((sum, w) => sum + w, 0) / 2;
+    [...text].forEach((ch, i) => {
+      const k = Math.min(1, Math.max(0, (t - i * 0.08) / 0.4));
+      const at = left + widths[i] / 2;
+      left += widths[i];
+      if (!k || ch === ' ') return;
+      const bob = this.fx.reduced ? 0 : Math.sin(this.fx.t * 2.6 + i * 0.8) * 6;
+      ctx.save();
+      ctx.translate(at, cy + bob);
+      const s = ease.outBack(k);
+      ctx.scale(s, s);
+      ctx.lineWidth = 18;
+      ctx.strokeStyle = '#3b1d00';
+      ctx.strokeText(ch, 0, 0);
+      const fill = ctx.createLinearGradient(0, -70, 0, 70);
+      fill.addColorStop(0, '#fffbe9');
+      fill.addColorStop(1, '#ffc94d');
+      ctx.fillStyle = fill;
+      ctx.fillText(ch, 0, 0);
+      ctx.restore();
+    });
+    if (t > 0.6 && !this.fx.reduced) {
+      ENDING_TWINKLES.forEach(([dx, dy], i) => {
+        const k = Math.max(0, Math.sin(t * 1.7 + i * 1.9)) ** 4;
+        if (k < 0.02) return;
+        const x = cx + dx;
+        const y = cy + dy;
+        const r = 6 + k * 12;
+        ctx.fillStyle = `rgba(255, 233, 168, ${k})`;
+        ctx.beginPath();
+        ctx.moveTo(x, y - r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.quadraticCurveTo(x, y, x, y + r);
+        ctx.quadraticCurveTo(x, y, x - r, y);
+        ctx.quadraticCurveTo(x, y, x, y - r);
+        ctx.fill();
+      });
+    }
+    ctx.restore();
   }
 }
 

@@ -1,4 +1,4 @@
-"""Check complete UI bounds, pointer controls, and generated sprites on small screens."""
+"""Check the HUD, the pause card and the end screen stay inside the stage on small screens, and the sound and pause controls work."""
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
@@ -32,11 +32,14 @@ with sync_playwright() as p:
         page.screenshot(path=f'/tmp/fish-final-pause-{width}.png')
         page.click('#btn-resume')
         assert page.locator('#overlay-pause').is_hidden()
-        page.evaluate('window.popoDebug.game.ui.showComplete(true,"You made parallelograms!","Both pairs of opposite sides are parallel.")')
+        # the end screen: The End over its circle, and Play Again
+        page.evaluate('() => { const g = window.popoDebug.game; g.instruct(""); g.ui.showHandle(false); g.ui.setDrop("hidden"); return PopoGame.celebrate(g, PopoGame.newToken()); }')
+        page.wait_for_function('() => !document.getElementById("btn-again").hidden', timeout=30000)
         page.wait_for_timeout(700)
-        for selector in ['#overlay-complete .card', '#complete-title', '#complete-lesson', '#btn-again']:
-            contained(selector)
+        contained('#btn-again')
+        title = page.evaluate('() => { const e = window.popoDebug.game.ending; return { x: e.x + e.pan.x, y: Math.max(120, e.y + e.pan.y - e.r - 115), r: e.r, top: e.y + e.pan.y - e.r, bottom: e.y + e.pan.y + e.r }; }')
+        assert 60 < title['y'] and title['top'] > title['y'] + 60 and title['bottom'] <= 941, title
         assert not errors, errors
-        print(f'PASS {width}x{height}: HUD bounds, sound, pause, resume, completion bounds, no errors', flush=True)
+        print(f'PASS {width}x{height}: HUD bounds, sound, pause, resume, end screen bounds, no errors', flush=True)
         page.close()
     browser.close()

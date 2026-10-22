@@ -59,22 +59,6 @@ function wordsOf(text) {
   return words;
 }
 
-// Fills an element with text whose *starred* words are highlighted.
-function markup(el, text) {
-  el.textContent = '';
-  text.split(/(\*[^*]+\*)/).forEach((part) => {
-    if (!part) return;
-    if (part.startsWith('*')) {
-      const b = document.createElement('b');
-      b.className = 'hl';
-      b.textContent = part.slice(1, -1);
-      el.appendChild(b);
-    } else {
-      el.appendChild(document.createTextNode(part));
-    }
-  });
-}
-
 class UI {
   constructor() {
     this.el = {
@@ -82,7 +66,7 @@ class UI {
       instruction: $('instruction'), instructionText: $('instruction-text'), instructionSay: $('instruction-say'), drop: $('btn-drop'),
       sound: $('btn-sound'), pause: $('btn-pause'),
       pauseOverlay: $('overlay-pause'), resume: $('btn-resume'), restart: $('btn-restart'),
-      completeOverlay: $('overlay-complete'), completeTitle: $('complete-title'), completeLesson: $('complete-lesson'), again: $('btn-again'),
+      again: $('btn-again'), scene: $('scene'),
       rotate: $('rotate-hint'), speech: $('speech'), caption: $('caption'),
     };
     this.handlers = {};
@@ -365,6 +349,15 @@ class UI {
     }
   }
 
+  // A word already showing bounces as it is read again.
+  bounceWord(i) {
+    const span = this.delivered && this.delivered.spans[i];
+    if (!span) return;
+    span.classList.remove('beat');
+    void span.offsetWidth;
+    span.classList.add('beat');
+  }
+
   // The instruction plate: a prompt, praise or hint, its words hidden until the game shows them.
   // Screen readers get the whole line at once. The plate gives a little boing on every change.
   setInstruction(text) {
@@ -411,21 +404,18 @@ class UI {
     if (show) this.el.resume.focus();
   }
 
-  showComplete(show, title, lesson) {
-    this.el.completeOverlay.hidden = !show;
-    if (!show) return;
-    markup(this.el.completeTitle, title);
-    markup(this.el.completeLesson, lesson);
-    this.el.again.focus({ preventScroll: true });
+  // The end screen's one button, springing in at the bottom right once The End is up.
+  showAgain(show) {
+    this.el.again.hidden = !show;
+    if (show) this.el.again.focus({ preventScroll: true });
   }
 
-  // The final card's lesson line, one property at a time, delivered word by word like the
-  // instruction plate.
-  setLesson(text) {
-    const words = this.layWords(this.el.completeLesson, this.el.completeLesson, text);
-    this.pop(this.el.completeLesson);
-    return words;
+  // The end screen moves the scene (the water and the world) under its circle; the curtain,
+  // HUD and buttons stay put.
+  panScene(x, y) {
+    this.el.scene.style.transform = x || y ? `translate(${(x * this.scale).toFixed(1)}px, ${(y * this.scale).toFixed(1)}px)` : '';
   }
+
 
   // --- hint hand ---------------------------------------------------------------
   showHand(dragging = false) {

@@ -178,11 +178,12 @@ class Fish {
 // of sight at the ends of the sea and float gently. The pace rises a little level by level, so
 // timing the net stays a game.
 const SCHOOL_SIZE = [0.78, 0.88]; // a touch smaller than the leaping fish, so two lanes fit
+const RUSH = 3;                   // seconds a whole new school takes to rush in and settle
 const LANE_SHARE = [0.9, 1.12];   // the two lanes' paces, as shares of the level's
 
 class Sea {
   constructor() {
-    this.lanes = LANE_SHARE.map((share, i) => ({ dir: i ? -1 : 1, share, y: 0, speed: 0, phase: Math.random() * TAU }));
+    this.lanes = LANE_SHARE.map((share, i) => ({ dir: i ? -1 : 1, share, y: 0, speed: 0, phase: Math.random() * TAU, rush: 0 }));
     this.t = 0;
   }
 
@@ -212,6 +213,11 @@ class Sea {
       f.queued = (this.queued = (this.queued || 0) + 1);
       school.push(f);
     }
+    // a whole new school (the first, or the golden one) rushes in: its lanes swim fast for a
+    // moment, newcomers following on quickly, then ease to their pace; every fish in a lane
+    // speeds and slows together, so none gains on another
+    const newcomers = school.length - keep.filter((f) => !f.gone && !f.caught && !f.leaving).length;
+    if (newcomers > school.length / 2) for (const lane of this.lanes) lane.rush = RUSH;
     // each fish floats at its own depth inside its lane, never into the next
     for (const f of school) {
       f.driftAmp = Math.max(0.5, Math.min(4, (room - f.h) / 2 - 1));
@@ -232,22 +238,28 @@ class Sea {
     this.t += dt;
     const span = area.right - area.left;
     for (const lane of this.lanes) {
-      const pace = lane.speed * (1 + 0.08 * Math.sin(this.t * 0.45 + lane.phase));
+      const rush = lane.rush > 0 ? Math.min(1, lane.rush / (RUSH * 0.6)) : 0;
+      lane.rush = Math.max(0, lane.rush - dt);
+      const pace = lane.speed * (1 + 0.08 * Math.sin(this.t * 0.45 + lane.phase)) * (1 + 2.6 * rush * rush * (3 - 2 * rush));
       const along = (f) => (((f.x - area.left) * lane.dir) % span + span) % span;
       // fish leaving the sea still hold their places until they're out of sight
       const members = fish.filter((f) => f.lane === lane && !f.gone && !f.caught && !f.frozen && !f.waiting)
         .sort((a, b) => along(a) - along(b));
       const queue = fish.filter((f) => f.lane === lane && f.waiting && !f.gone).sort((a, b) => a.queued - b.queued);
-      // the next newcomer swims in, out of sight at the lane's start, once the last fish in is
-      // well clear of it and none is about to loop round onto it
+      // the next newcomer swims in, out of sight at the lane's start, once the last fish in is a
+      // body and a gap clear of it and the next to loop round is too; until then that next fish
+      // holds back a little, so the gap opens however full the lane is
+      let holdBack = null;
       if (queue.length) {
-        const room = Math.max(queue[0].w + 50, 0.7 * span / (members.length + queue.length));
+        const clear = queue[0].w + 30;
         const first = members.length ? along(members[0]) : span;
         const last = members.length ? span - along(members[members.length - 1]) : span;
-        if (first >= room && last >= room) {
+        if (first >= clear && last >= clear) {
           queue[0].waiting = false;
           queue[0].speed = pace;
           members.unshift(queue[0]);
+        } else if (members.length) {
+          holdBack = members[members.length - 1];
         }
       }
       const n = members.length;
@@ -267,6 +279,7 @@ class Sea {
           want = pace * (1 + Math.max(-0.3, Math.min(0.3, off / (2 * even))));
           if (ahead < (f.w + next.w) / 2 + 30) want = Math.min(want, pace * 0.5);
         }
+        if (f === holdBack) want = Math.min(want, pace * 0.6);
         f.speed += (want - f.speed) * Math.min(1, dt * 1.2);
       });
     }

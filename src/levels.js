@@ -110,17 +110,13 @@ const STORY = {
     { who: 'narrator', text: 'And today…' },
     { who: 'narrator', text: 'he wants to catch *all* kinds of fish!', cue: { word: 4, do: 'fishIn' } },
   ],
+  // Popo only reacts, as he does in Fishing Frenzy (his lines are his recordings from there):
+  // a catch, a wrong net, a right net that came up empty, the golden school, and the end
   catch: { who: 'popo', text: '*Great* catch!', cue: { word: 0, do: 'hop' } },
-  complete: { who: 'popo', text: 'We caught them *all*!', cue: { word: 0, do: 'hop' } },
-  // the final card: the title, then the properties one at a time
-  title: 'Parallelogram *Pro*!',
-  lessons: [
-    'Opposite sides are *parallel*.',
-    'Opposite sides are *equal*.',
-    'Opposite angles are *equal*.',
-    'Adjacent angles add to *180°*.',
-    'Diagonals *bisect* each other.',
-  ],
+  oops: { who: 'popo', text: 'Whoopsie Doopsie!' },
+  empty: { who: 'popo', text: 'Huh?!' },
+  golden: { who: 'popo', text: '*Woah!*', cue: { word: 0, do: 'hop' } },
+  complete: [{ who: 'popo', text: '*Wow!*', cue: { word: 0, do: 'hop' } }, { who: 'popo', text: 'What a *catch!*' }],
 };
 
 Object.assign(PopoGame, { LOCATIONS, LEVELS, NATURAL_FISH, STORY, shuffle, schoolFor, schoolSize });

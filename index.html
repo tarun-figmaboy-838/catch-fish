@@ -17,6 +17,7 @@
         <canvas id="water" class="layer"></canvas>
         <canvas id="world" class="layer"></canvas>
       </div>
+      <canvas id="curtain" class="layer curtain" aria-hidden="true"></canvas>
 
       <div id="hits" class="hits">
         <button id="handle" class="handle" type="button" aria-label="Net corner. Drag it, or move it with the arrow keys and press Enter." hidden></button>
@@ -48,6 +49,10 @@
             <span class="badge" aria-hidden="true"><svg viewBox="0 0 44 40"><path d="M14 4h26l-8 16H6z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M21 4l-5 16M30 4l-5 16M10 12h26" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.6"/><path d="M22 23v13M15 30l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
             <span>Drop Net</span>
           </button>
+          <button id="btn-again" class="drop-btn again-btn" type="button" hidden>
+            <span class="badge" aria-hidden="true"><svg viewBox="0 0 44 40"><path d="M31.5 25a11 11 0 1 1-1.6-11.4" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round"/><path d="M32.5 6.5v8.6h-8.6" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span>Play Again</span>
+          </button>
         </div>
       </div>
 
@@ -59,19 +64,6 @@
         </div>
       </section>
 
-      <section id="overlay-complete" class="overlay complete" hidden aria-labelledby="complete-title">
-        <div class="card celebrate"><span class="card-kicker">QUEST COMPLETE</span>
-          <svg class="net-icon" viewBox="0 0 140 80" aria-hidden="true">
-            <path d="M36 10h94l-26 60H10z" fill="rgba(255, 216, 74, 0.25)" stroke="#4a2c0f" stroke-width="5" stroke-linejoin="round"/>
-            <path d="M55 10L36 70M74 10L55 70M93 10L74 70M112 10L93 70M27 30h94M19 50h94" fill="none" stroke="#4a2c0f" stroke-width="1.6" opacity="0.45"/>
-            <circle cx="36" cy="10" r="5" fill="#ffd84a" stroke="#4a2c0f" stroke-width="2.5"/><circle cx="130" cy="10" r="5" fill="#ffd84a" stroke="#4a2c0f" stroke-width="2.5"/>
-            <circle cx="104" cy="70" r="5" fill="#ffd84a" stroke="#4a2c0f" stroke-width="2.5"/><circle cx="10" cy="70" r="5" fill="#ffd84a" stroke="#4a2c0f" stroke-width="2.5"/>
-          </svg>
-          <h2 id="complete-title"></h2>
-          <p id="complete-lesson" class="words"></p>
-          <button id="btn-again" class="btn primary" type="button">Play Again</button>
-        </div>
-      </section>
 
       <section id="screen-start" class="screen start" aria-labelledby="game-title">
         <h1 id="game-title" class="sr-only">Shape Fish Adventure</h1>

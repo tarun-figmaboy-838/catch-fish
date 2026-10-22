@@ -25,6 +25,7 @@ const tenths = (m) => Math.round(m * 10) / 10;
 // clear of the water. Its mouth and toe gather around a broad rounded belly.
 const POUCH = { depth: 0.3, most: 45 };
 const NECK = 0.012; // above this (a share down the net) the floats fold away as the bag closes
+const TOE = 1.01;   // and below this the weights
 
 // The closed bag's half-width down its length (t from mouth to toe), as a share of the net's
 // width: a potli. A short neck gathered narrow enough to go up into the ring's bottom bar, round
@@ -86,6 +87,8 @@ class Net {
     this.stopAt = 0;      // the stop it is at
     this.drawn = null;    // where the corner is drawn while it glides onto its new stop
     this.arrowGap = 70;   // how far the slide arrows sit from the knob (Game.resize fits it)
+    this.sharpRes = 2;    // texture pixels per stage pixel once the shape holds still (Game.resize)
+    this.textureRes = 0;
     this.tear = 0;        // 0 whole, 1 torn open by a catch a wrong net couldn't hold
     this.burst = null;    // bits of mesh flying off as it tears: { t } seconds
     this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -605,10 +608,23 @@ class Net {
   // along; closed into a bag, the mesh follows meshPoint. Drawn in net coordinates and cached
   // per shape, so bobbing, swinging and lowering never rebuild it; only a drag or the bag
   // closing does.
+  // A shape that is changing (a drag, the bag closing) is drawn at one texture pixel per stage
+  // pixel, quick to rebuild every frame; once it has held still for two frames it is redrawn at
+  // the screen's full sharpness (sharpRes, set by Game.resize). The open net is a flat warp and
+  // needs few rows of triangles; the bag's curves get more.
   drawGenerated(ctx, wet, frame) {
     const key = JSON.stringify(frame) + this.pouch;
+    const changed = this.textureKey !== key;
+    if (changed) {
+      this.stillFrames = 0;
+    } else if (this.textureRes < this.sharpRes && (this.stillFrames = (this.stillFrames || 0) + 1) >= 2) {
+      this.textureKey = null;
+    }
     if (this.textureKey !== key) {
+      const res = changed ? 1 : this.sharpRes;
+      this.textureRes = res;
       this.textureKey = key;
+      const rows = this.pouch ? 18 : 6;
       const img = PopoGame.assets.netPolished;
       const map = (u, v) => this.meshPoint(u, v, frame);
       // registration is on the rope centreline; the outer floats and weights come along
@@ -618,16 +634,16 @@ class Net {
       const v0 = -source.y / source.h;
       const v1 = (img.height - source.y) / source.h;
       const bounds = [];
-      for (let y = 0; y <= 18; y += 1) for (let x = 0; x <= 12; x += 1) bounds.push(map(u0 + (u1 - u0) * x / 12, v0 + (v1 - v0) * y / 18));
+      for (let y = 0; y <= rows; y += 1) for (let x = 0; x <= 12; x += 1) bounds.push(map(u0 + (u1 - u0) * x / 12, v0 + (v1 - v0) * y / rows));
       const left = Math.floor(Math.min(...bounds.map((q) => q.x))) - 3;
       const top = Math.floor(Math.min(...bounds.map((q) => q.y))) - 3;
       const width = Math.ceil(Math.max(...bounds.map((q) => q.x)) - left) + 3;
       const height = Math.ceil(Math.max(...bounds.map((q) => q.y)) - top) + 3;
       const canvas = this.textureCanvas || (this.textureCanvas = document.createElement('canvas'));
-      canvas.width = width * 2;
-      canvas.height = height * 2;
+      canvas.width = Math.ceil(width * res);
+      canvas.height = Math.ceil(height * res);
       const g = canvas.getContext('2d');
-      g.scale(2, 2);
+      g.scale(res, res);
       g.translate(-left, -top);
       const triangle = (a, b, c) => {
         const q = [a, b, c].map(([u, v]) => map(u, v));
@@ -659,12 +675,12 @@ class Net {
         g.drawImage(img, 0, 0);
         g.restore();
       };
-      for (let y = 0; y < 18; y += 1) {
+      for (let y = 0; y < rows; y += 1) {
         for (let x = 0; x < 12; x += 1) {
           const u = u0 + (u1 - u0) * x / 12;
-          const v = v0 + (v1 - v0) * y / 18;
+          const v = v0 + (v1 - v0) * y / rows;
           const r = u0 + (u1 - u0) * (x + 1) / 12;
-          const b = v0 + (v1 - v0) * (y + 1) / 18;
+          const b = v0 + (v1 - v0) * (y + 1) / rows;
           triangle([u, v], [r, v], [r, b]);
           triangle([u, v], [r, b], [u, b]);
         }
@@ -738,42 +754,48 @@ class Net {
   }
 
   // The warped texture, in net coordinates. Closing into a bag, the floats along the top rope
-  // would be squeezed into the gathered mouth and fan out above it like spikes, so they fold
-  // away as it closes: the mesh below them is drawn whole, the band above fades out, and the
-  // mouth goes up into the ring.
+  // would be squeezed into the gathered mouth and fan out above it like spikes, and the weights
+  // along the bottom would hang from the toe in a tassel, so both fold away as it closes: the
+  // bag's body is drawn whole and the bands above and below it fade out.
   paintMesh(ctx, frame, b) {
     const image = () => ctx.drawImage(this.textureCanvas, b.left, b.top, b.width, b.height);
     if (!this.pouch) { image(); return; }
-    const neck = [];
-    for (let i = 0; i <= 12; i += 1) neck.push(this.meshPoint(i / 12, NECK, frame));
+    // the bag's body lies between its mouth (below the floats) and its toe (above the weights)
+    const edge = (v) => {
+      const line = [];
+      for (let i = 0; i <= 12; i += 1) line.push(this.meshPoint(i / 12, v, frame));
+      return line;
+    };
+    const neck = edge(NECK);
+    const toe = edge(TOE);
     const right = b.left + b.width;
-    const bottom = b.top + b.height;
-    const mouth = () => {
+    const body = () => {
       ctx.moveTo(b.left, neck[0].y);
       neck.forEach((q) => ctx.lineTo(q.x, q.y));
       ctx.lineTo(right, neck[neck.length - 1].y);
+      ctx.lineTo(right, toe[toe.length - 1].y);
+      for (let i = toe.length - 1; i >= 0; i -= 1) ctx.lineTo(toe[i].x, toe[i].y);
+      ctx.lineTo(b.left, toe[0].y);
+      ctx.closePath();
     };
     ctx.save();
     ctx.beginPath();
-    mouth();
-    ctx.lineTo(right, bottom);
-    ctx.lineTo(b.left, bottom);
-    ctx.closePath();
+    body();
     ctx.clip();
     image();
     ctx.restore();
     if (this.pouch >= 1) return;
+    // the floats above and the weights below fade as the bag closes
     ctx.save();
     ctx.globalAlpha *= (1 - this.pouch) ** 2;
     ctx.beginPath();
-    mouth();
-    ctx.lineTo(right, b.top);
-    ctx.lineTo(b.left, b.top);
-    ctx.closePath();
-    ctx.clip();
+    ctx.rect(b.left, b.top, b.width, b.height);
+    body();
+    ctx.clip('evenodd');
     image();
     ctx.restore();
   }
+
 
   framePath(ctx, c) {
     ctx.beginPath();

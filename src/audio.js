@@ -305,6 +305,8 @@ class AudioEngine {
       case 'word': { const f = 700 + Math.random() * 260; this.tone({ freq: f, to: f * 1.15, type: 'sine', dur: 0.05, gain: 0.04 }); break; }
       case 'cheer': [523.25, 659.25, 783.99].forEach((n, i) => this.tone({ freq: n, t: now + i * 0.07, type: 'triangle', dur: 0.16, gain: 0.08 })); break;
       case 'bloop': this.tone({ freq: 420, to: 980, dur: 0.12, gain: 0.09 }); this.tone({ freq: 620, to: 1300, t: now + 0.08, dur: 0.09, gain: 0.05 }); break;
+      // the end screen's circle closing in (or shut), a sliding whistle as in Fishing Frenzy
+      case 'iris': this.tone({ freq: 1400, to: 260, type: 'sine', dur: 0.75, gain: 0.1 }); break;
       // the net puzzle: picking the corner up, letting it go off its place, it clicking home
       case 'grab': this.tone({ freq: 320, to: 620, dur: 0.09, gain: 0.14 }); this.noise({ dur: 0.04, type: 'highpass', freq: 2500, gain: 0.05 }); break;
       case 'wobble': this.tone({ freq: 300, to: 240, type: 'triangle', dur: 0.14, gain: 0.07 }); this.tone({ freq: 260, to: 290, t: now + 0.12, type: 'triangle', dur: 0.12, gain: 0.05 }); break;

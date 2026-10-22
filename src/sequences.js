@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { clock, ease, Cancelled, state, PHASE, newToken, isCurrent, Fish, STORY, LEVELS, NATURAL_FISH, STAGE_W, geo, TUCK } = PopoGame;
+const { clock, ease, Cancelled, state, PHASE, newToken, isCurrent, Fish, STORY, LEVELS, NATURAL_FISH, STAGE_W, STAGE_H, geo, TUCK } = PopoGame;
 
 function swallow(e) {
   if (!(e instanceof Cancelled)) throw e;
@@ -427,13 +427,13 @@ async function dropNet(game) {
   }
 }
 
-// A right net that came up empty: the fish swam on before it landed. Popo shrugs, and Drop Net
-// comes back for another try when fish are under the net; the frame stays right.
+// A right net that came up empty: the fish swam on before it landed. Popo is baffled ("Huh?!"),
+// and Drop Net comes back for another try when fish are under the net; the frame stays right.
 async function emptyNet(game, token) {
   const { popo, audio, ui } = game;
   popo.react('think', 1.2);
   audio.play('wobble');
-  await clock.wait(600, token);
+  await game.say(STORY.empty, token);
   state.phase = PHASE.PUZZLE_READY;
   state.idleTime = 0;
   ui.setDrop('on');
@@ -468,7 +468,9 @@ async function netBreaks(game, caught, token) {
     await clock.tween(220, token, (t) => { net.tear = 1 - (1 - t) ** 2; });
     net.tear = 1;
     audio.play('woah');
-    await Promise.all(caught.map((f, i) => escape(game, f, i, hole, token)));
+    await Promise.all([...caught.map((f, i) => escape(game, f, i, hole, token)), game.say(STORY.oops, token)]);
+  } else {
+    await game.say(STORY.oops, token);
   }
   state.misses += 1;
   popo.react('think', 1.4);
@@ -574,7 +576,8 @@ async function nextLevel(game, token) {
   // waters, they come along); only for the golden school do they swim off out of the sea, as
   // the golden fish swim in behind them
   state.fish = state.fish.filter((f) => !f.gone && !f.caught);
-  if (Boolean(LEVELS[next].rare) !== Boolean(LEVELS[state.level].rare)) {
+  const golden = Boolean(LEVELS[next].rare) && !LEVELS[state.level].rare;
+  if (golden) {
     for (const f of state.fish) f.swimAway();
     game.strays.push(...state.fish.filter((f) => !f.gone));
     state.fish = [];
@@ -585,6 +588,8 @@ async function nextLevel(game, token) {
   const before = game.prepareLevel(next);
   game.spawnSchool();
   await letNetDown(game, token, before);
+  // the golden school rushing in: Popo can't believe his eyes
+  if (golden) await game.say(STORY.golden, token);
   game.beginPuzzle();
 }
 
@@ -645,11 +650,14 @@ async function rowTo(game, nextIndex, token) {
   await clock.wait(250, token);
 }
 
-// After the eighth net: Popo cheers, and the final card names the properties one at a time.
+// After the eighth net: Popo cheers ("Wow! What a catch!") and the end screen closes in on him,
+// as in Fishing Frenzy.
 async function celebrate(game, token) {
-  const { popo, fx, audio, ui, net } = game;
+  const { popo, fx, audio, net, ui } = game;
   state.phase = PHASE.GAME_COMPLETE;
   game.instruct('');
+  ui.showHandle(false);
+  ui.setDrop('hidden');
   audio.play('tada');
   popo.react('laugh', 2.2);
   const ring = net.ring();
@@ -658,17 +666,63 @@ async function celebrate(game, token) {
       fx.sparkle(ring.x + (Math.random() - 0.5) * 400, ring.y + 60 + Math.random() * 160, 10);
     }).catch(() => {});
   }
-  await game.say(STORY.complete, token);
-  await clock.wait(200, token);
-  ui.showComplete(true, STORY.title, '');
-  game.announceComplete();
-  const spoken = game.speak(STORY.title);
-  await clock.wait(Math.max(1200, spoken * 1000 + 250), token);
-  for (const lesson of STORY.lessons) {
-    const said = game.teach(lesson);
-    await clock.wait(Math.max(1700, said * 1000 + 700), token);
-  }
+  for (const line of STORY.complete) await game.say(line, token);
+  await clock.wait(300, token);
+  await theEnd(game, token);
 }
 
-Object.assign(PopoGame, { opening, startLevels, dropNet, rowTo, celebrate, letNetDown });
+// The End, as in Fishing Frenzy: a circle closes in on Popo and his raft over the live scene and
+// glides with them to the middle, everything around it a warm, slowly turning sunburst; "The End"
+// pops in letter by letter while Popo laughs, then Play Again springs in at the bottom right.
+async function theEnd(game, token) {
+  const { popo, audio, ui, fx } = game;
+  const reduced = fx.reduced;
+  const head = popo.headTop();
+  const raft = popo.raftEnds();
+  const deck = popo.anchor.y + 24;
+  const centre = { x: (raft.left + raft.right) / 2, y: (head.y + deck) / 2 };
+  const r = Math.max(...[{ x: raft.left, y: deck }, { x: raft.right, y: deck }, head].map((p) => geo.distance(p, centre))) + 14;
+  // the scene's left edge must stay outside the circle as it glides
+  centre.x = Math.max(centre.x, r + 4);
+  const ending = game.ending = { x: centre.x, y: centre.y, r: 1500, pan: { x: 0, y: 0 }, t: 0, laugh: true, laughIn: 0, giggles: 2 };
+  audio.play('iris');
+  await clock.tween(reduced ? 400 : 950, token, (t) => { ending.r = 1500 + (r - 1500) * ease.inOut(t); });
+  const to = { x: STAGE_W / 2, y: Math.min(STAGE_H - r - 12, Math.max(575, r + 235)) };
+  await clock.tween(reduced ? 300 : 750, token, (t) => {
+    const k = ease.inOut(t);
+    ending.pan = { x: (to.x - centre.x) * k, y: (to.y - centre.y) * k };
+  });
+  game.announceComplete();
+  ending.titleAt = ending.t;
+  audio.play('tada');
+  await clock.wait(reduced ? 600 : 1300, token);
+  ui.showAgain(true);
+  audio.play('bloop');
+}
+
+// Play Again: The End fades as the circle closes to nothing, the game is set up afresh out of
+// sight, and the circle opens again on the first net (Game.updateEnding).
+async function closeCurtain(game) {
+  const token = newToken();
+  const ending = game.ending;
+  ending.closing = true;
+  ending.laugh = false;
+  game.ui.showAgain(false);
+  game.audio.play('iris');
+  const from = ending.r;
+  try {
+    await clock.tween(game.fx.reduced ? 250 : 500, token, (t) => {
+      ending.r = from * (1 - t * t * t);
+      ending.fade = 1 - t;
+    });
+  } catch (e) {
+    swallow(e);
+    return;
+  }
+  game.reset();
+  game.ending = { x: STAGE_W / 2, y: STAGE_H / 2, r: 0, pan: { x: 0, y: 0 }, t: 0, opening: true };
+  startLevels(game);
+}
+
+Object.assign(PopoGame, { opening, startLevels, dropNet, rowTo, celebrate, closeCurtain, letNetDown });
 })(window.PopoGame = window.PopoGame || {});

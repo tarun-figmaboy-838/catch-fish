@@ -15,6 +15,9 @@ class Stage {
     this.root = root;
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
+    // the end screen's iris and sunburst, over the scene (which it can pan) and under the HUD
+    this.curtain = document.getElementById('curtain');
+    this.curtainCtx = this.curtain.getContext('2d');
     this.scale = 1;
     this.dpr = 1;
     this.portrait = false;
@@ -37,6 +40,10 @@ class Stage {
     this.canvas.height = Math.round(h * this.dpr);
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
+    this.curtain.width = this.canvas.width;
+    this.curtain.height = this.canvas.height;
+    this.curtain.style.width = `${w}px`;
+    this.curtain.style.height = `${h}px`;
   }
 
   // Resets the transform so drawing code can use logical coordinates.
@@ -44,6 +51,12 @@ class Stage {
     const k = this.dpr * this.scale;
     this.ctx.setTransform(k, 0, 0, k, 0, 0);
     return this.ctx;
+  }
+
+  beginCurtain() {
+    const k = this.dpr * this.scale;
+    this.curtainCtx.setTransform(k, 0, 0, k, 0, 0);
+    return this.curtainCtx;
   }
 
   toStage(clientX, clientY) {

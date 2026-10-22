@@ -8,7 +8,7 @@ the child drags it to (also through a window resize mid-drag) with nothing givin
 Drop Net then locks the answer with its praise; that a right net dropped with no fish under it
 comes up empty and can be dropped again; that each level's sea holds its whole school and a
 drop timed for fish under the net catches some of them; that waters change, that pause freezes
-the game, that the final card appears and tells the hosting page, and that Play Again starts
+the game, that the end screen appears and tells the hosting page, and that Play Again starts
 over. Fails on any console error.
 """
 import time
@@ -22,7 +22,7 @@ STATE = '''() => { const s = window.popoDebug.state, g = window.popoDebug.game;
   return { phase: s.phase, level: s.level, loc: s.locationIndex, caught: s.caught, paused: s.paused, misses: s.misses,
            dropHidden: document.getElementById('btn-drop').hidden, dropReady: document.getElementById('btn-drop').classList.contains('ready'),
            swimming: s.fish.filter((f) => !f.gone && !f.caught && !f.frozen).length, furl: g.net.furl, tear: g.net.tear,
-           complete: !document.getElementById('overlay-complete').hidden, start: !document.getElementById('screen-start').hidden,
+           complete: !document.getElementById('btn-again').hidden, ending: Boolean(g.ending && g.ending.titleAt !== undefined), start: !document.getElementById('screen-start').hidden,
            ok: g.net.check().ok, locked: g.net.locked, fish: s.fish.length, school: PopoGame.schoolSize(PopoGame.LEVELS[s.level]),
            stop: g.net.stopAt, netRight: g.netRight, handleHidden: document.getElementById('handle').hidden,
            words: document.querySelectorAll('#instruction-text .w').length, wordsIn: document.querySelectorAll('#instruction-text .w.in').length,
@@ -197,11 +197,12 @@ def play():
         st = wait_for(page, lambda s: s['complete'], 20, 'the final screen')
         check(st['phase'] == 'gameComplete' and page.evaluate('() => window.completed && window.completed.levels') == len(levels),
               'the final screen appears and the page is told')
-        title = page.evaluate('() => document.getElementById("complete-title").textContent')
-        check(title == 'Parallelogram Pro!', 'the final card has its title', title)
+        check(st['ending'], 'the end screen closes in on Popo with The End')
         page.click('#btn-again')
         st = wait_for(page, lambda s: s['phase'] == 'puzzleReady', 20, 'Play Again')
         check(st['level'] == 0 and st['caught'] == 0 and not st['complete'], 'Play Again starts the nets over')
+        st = wait_for(page, lambda s: not page.evaluate('() => Boolean(window.popoDebug.game.ending)'), 5, 'the circle to open again')
+        check(page.evaluate('() => document.getElementById("scene").style.transform') == '', 'the circle opens on the first net, the scene back in place')
         check(not errors, 'no console errors', '; '.join(errors[:3]))
         browser.close()
 

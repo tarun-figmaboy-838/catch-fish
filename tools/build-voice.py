@@ -27,6 +27,7 @@ Run: python3 tools/build-voice.py --audition    one sample from each candidate v
 import argparse
 import array
 import base64
+import importlib.util
 import io
 import json
 import os
@@ -125,8 +126,7 @@ LINES = [
     ('narrator', 'Opposite angles are *equal*.', LESSON),
     ('narrator', 'Adjacent angles add to *180°*.', LESSON, 'Adjacent angles add to 180 degrees.'),
     ('narrator', 'Diagonals *bisect* each other.', LESSON),
-    ('popo', '*Great* catch!', 'Delighted and proud.'),
-    ('popo', 'We caught them *all*!', 'Overjoyed.'),
+    # Popo's lines are his Fishing Frenzy studio recordings: tools/build-popo-voice.py adds them
 ]
 LINES = [line if len(line) == 4 else (*line, None) for line in LINES]
 
@@ -472,6 +472,11 @@ def main():
             fh.write(f'  {json.dumps(k)}: {json.dumps(v)},\n')
         fh.write('};\n')
     print(f'wrote src/voice-data.js ({len(clips)} of {len(LINES)} lines)')
+    # Popo speaks in his Fishing Frenzy voice (tools/build-popo-voice.py)
+    spec = importlib.util.spec_from_file_location('build_popo_voice', os.path.join(ROOT, 'tools', 'build-popo-voice.py'))
+    popo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(popo)
+    popo.merge()
 
 
 if __name__ == '__main__':
