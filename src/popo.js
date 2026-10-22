@@ -20,6 +20,11 @@ const FRAMES = [
   { shaft: [616, 293], head: [260, 20], face: [-229, -144] },
 ];
 const S = 0.37; // sheet pixels to stage pixels, the same both ways
+// His crank in sixteen steps (assets/sprites/popo-crank.webp, tools/build-crank.py): the four
+// poses and three in-betweens of each quarter turn, at `scale` of the sheet's pixels, every frame
+// with the shaft tip at `shaft`. Until it has loaded, the four poses dissolve into each other.
+const CRANK = { frames: 16, columns: 4, width: 343, height: 316, scale: 0.6, shaft: [336.6, 184.2] };
+const CRANK_STEPS = CRANK.frames / 4;
 // The scratch canvas the two poses either side of the wheel's turn are mixed on, with every
 // pose's shaft tip at BLEND.shaft (sheet pixels).
 const BLEND = { w: 830, h: 730, shaft: [725, 425] };
@@ -201,6 +206,10 @@ class Popo {
     ctx.rotate(tilt);
     ctx.scale(1 - breath - bounce * 0.4, 1 + breath + bounce);
     ctx.translate(-this.axle.x, -this.axle.y);
+    if (assets.popoCrank && this.drawCrank(ctx)) {
+      ctx.restore();
+      return;
+    }
     // the two poses either side of the wheel's turn: each held a moment, then dissolving into
     // the next over the middle of the quarter turn
     const q = Math.floor(this.crank);
@@ -216,6 +225,35 @@ class Popo {
       ctx.drawImage(this.blendPoses(a, b, mix), this.axle.x - BLEND.shaft[0] * S, this.axle.y - BLEND.shaft[1] * S, BLEND.w * S, BLEND.h * S);
     }
     ctx.restore();
+  }
+
+  // The sixteen-step crank: the frames either side of the wheel's turn, the one mixed into the
+  // next (so the wheel turns on smoothly whatever the frame rate). Resting on one of the four
+  // poses, the sheet's own sharper pose is drawn instead (returns false).
+  drawCrank(ctx) {
+    const at = this.crank * CRANK_STEPS;
+    const i = Math.floor(at + 1e-4);
+    const mix = Math.max(0, at - i);
+    const a = ((i % CRANK.frames) + CRANK.frames) % CRANK.frames;
+    if (mix < 0.002 && a % CRANK_STEPS === 0) return false;
+    const b = (a + 1) % CRANK.frames;
+    const c = this.crankBlend || (this.crankBlend = document.createElement('canvas'));
+    if (c.width !== CRANK.width) { c.width = CRANK.width; c.height = CRANK.height; }
+    const g = c.getContext('2d');
+    g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, c.width, c.height);
+    g.globalCompositeOperation = 'lighter';
+    for (const [f, alpha] of [[a, 1 - mix], [b, mix]]) {
+      if (alpha < 0.002) continue;
+      g.globalAlpha = alpha;
+      g.drawImage(assets.popoCrank, (f % CRANK.columns) * CRANK.width, Math.floor(f / CRANK.columns) * CRANK.height,
+        CRANK.width, CRANK.height, 0, 0, CRANK.width, CRANK.height);
+    }
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    const k = S / CRANK.scale;
+    ctx.drawImage(c, this.axle.x - CRANK.shaft[0] * k, this.axle.y - CRANK.shaft[1] * k, CRANK.width * k, CRANK.height * k);
+    return true;
   }
 
   // Two poses mixed, shaft on shaft, each slid part of the way toward the other's face so the

@@ -181,6 +181,10 @@ never change, so a year-long cache would keep old art against new code.
   backgrounds and their water masks, the raft, the title fish and the natural fish (blue and
   teal ones are left out because they vanish against the water), and the WebP copies of the
   generated art; `--generated` rebuilds only those (run it whenever `assets/generated/` changes).
+- `tools/build-crank.py` – Popo's crank in sixteen steps (`assets/sprites/popo-crank.webp`):
+  the three in-betweens of each quarter turn of the operating sheet, made by optical flow (needs
+  OpenCV); `src/popo.js` mixes each frame into the next as the wheel turns, at his own steady
+  rhythm, and rests on the sheet's own poses.
 - `tools/build-voice.py` – records the voice lines into `src/voice-data.js` (below);
   `tools/build-popo-voice.py` adds Popo's Fishing Frenzy clips.
 - `tools/build-rowing.py` – Popo's paddling rig (`src/rowing.js`, `src/rowing-data.js`);
