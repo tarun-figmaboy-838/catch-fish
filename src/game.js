@@ -959,7 +959,7 @@ class Game {
     net.origin = popo.transformPoint(winch.hang.x, winch.hang.y);
     net.drop = winch.ropeOut;
     net.ropePhase = winch.ropeOut;
-    popo.setMachine(winch);
+    popo.setMachine(winch, dt);
     // hanging on its sling, the net sways a touch while it waits (easing into it, never with a
     // jump); it holds still for a drag
     const idle = state.phase === PHASE.PUZZLE_READY;

@@ -5,17 +5,29 @@ const { assets } = PopoGame;
 const TAU = Math.PI * 2;
 
 // Popo is the generated operating sheet (assets/generated/popo-operating.png): four poses of
-// the seated bear turning his handwheel, in a 2 x 2 grid. Each frame is registered on the
-// tip of the wheel's shaft, which sits on the winch's axle, so the wheel never drifts off the
-// machine as the poses change. Points are sheet pixels inside the frame.
+// the seated bear turning his handwheel, in a 2 x 2 grid, one a quarter turn on from the last.
+// Each frame is registered on the tip of the wheel's shaft, which sits on the winch's axle, so
+// the wheel never drifts off the machine as the poses change. Points are sheet pixels inside
+// the frame. As the wheel turns he dissolves from one pose to the next (drawBody), so his
+// cranking runs on smoothly instead of stepping a quarter turn at a time. `face` is where his
+// nose is, from the shaft tip: the dissolve slides each pose's face toward the other's, so
+// there's never a double face.
 const CELL = { w: 694, h: 566 };
 const FRAMES = [
-  { shaft: [657, 355.5], head: [300, 52] },
-  { shaft: [616, 355.5], head: [260, 66] },
-  { shaft: [661, 293.5], head: [300, 24] },
-  { shaft: [616, 293], head: [260, 20] },
+  { shaft: [657, 355.5], head: [300, 52], face: [-231, -179] },
+  { shaft: [616, 355.5], head: [260, 66], face: [-230, -165] },
+  { shaft: [661, 293.5], head: [300, 24], face: [-243, -143] },
+  { shaft: [616, 293], head: [260, 20], face: [-229, -144] },
 ];
 const S = 0.37; // sheet pixels to stage pixels, the same both ways
+// The scratch canvas the two poses either side of the wheel's turn are mixed on, with every
+// pose's shaft tip at BLEND.shaft (sheet pixels).
+const BLEND = { w: 830, h: 730, shaft: [725, 425] };
+const FACE_FOLLOW = 0.6; // how far the dissolving poses slide their faces together
+// He cranks at his own steady pace while the winch runs, quarter turns a second (the drum's
+// rope speeds up and slows down; a bear turning a wheel keeps a rhythm).
+const CRANK_RATE = 4.4;
+const smooth = (x) => x * x * (3 - 2 * x);
 
 // The raft prop (popo-props): cell point (186, 383) sits on the anchor; drawn at 1.2 so the
 // deck has room for the winch beside Popo while the net hangs clear of the raft.
@@ -40,6 +52,9 @@ class Popo {
     this.rowing = null;
     this.axle = { x: 0, y: 0 };
     this.frame = 0;
+    this.crank = 0;       // the wheel's turn as he shows it, in quarter turns (see setMachine)
+    this.crankSpeed = 0;
+    this.crankRest = null;
     this.waterResponse = 0;
     this.waveY = 0;
     this.waveAngle = 0;
@@ -68,11 +83,27 @@ class Popo {
     if (this.squash) this.squash *= Math.max(0, 1 - dt * 9);
   }
 
-  // The wheel's pose follows the drum: one frame per quarter turn.
-  setMachine(winch) {
+  // While the winch runs Popo turns his wheel its way (forward letting rope out, back winding it
+  // in) at a steady rhythm, easing in as he starts; when it stops he carries the stroke he's in
+  // on to the next pose and rests there, so the wheel never jumps or freezes mid-turn.
+  setMachine(winch, dt = 0) {
     this.axle = winch.axle;
-    this.frame = ((Math.floor(winch.angle / (TAU / 4)) % 4) + 4) % 4;
     this.operating = winch.working !== 0;
+    if (this.operating) {
+      this.crankRest = null;
+      const rate = winch.working * CRANK_RATE * (this.reduced ? 0.6 : 1);
+      this.crankSpeed += (rate - this.crankSpeed) * Math.min(1, dt * 7);
+      this.crank += this.crankSpeed * dt;
+    } else if (this.crankSpeed !== 0 || this.crankRest !== null) {
+      if (this.crankRest === null) this.crankRest = this.crankSpeed >= 0 ? Math.ceil(this.crank - 0.02) : Math.floor(this.crank + 0.02);
+      this.crankSpeed = 0;
+      this.crank += (this.crankRest - this.crank) * Math.min(1, dt * 9);
+      if (Math.abs(this.crankRest - this.crank) < 0.003) {
+        this.crank = this.crankRest;
+        this.crankRest = null;
+      }
+    }
+    this.frame = ((Math.round(this.crank) % 4) + 4) % 4;
   }
 
   // waveY and waveAngle come from the animated water surface under the raft (see game.js).
@@ -156,8 +187,6 @@ class Popo {
   // Alive while still: the whole bear breathes from his seat. A reaction bounces him, or
   // tilts his head while he thinks.
   drawBody(ctx) {
-    const o = this.frameOrigin();
-    const seat = { x: o.x + CELL.w * S / 2, y: o.y + CELL.h * S };
     const still = this.reduced || this.operating;
     const breath = still ? 0 : Math.sin(this.bobT * 2) * 0.012;
     let bounce = 0;
@@ -172,8 +201,46 @@ class Popo {
     ctx.rotate(tilt);
     ctx.scale(1 - breath - bounce * 0.4, 1 + breath + bounce);
     ctx.translate(-this.axle.x, -this.axle.y);
-    ctx.drawImage(assets.popoOperating, (this.frame % 2) * CELL.w, this.frame > 1 ? CELL.h : 0, CELL.w, CELL.h, o.x, o.y, CELL.w * S, CELL.h * S);
+    // the two poses either side of the wheel's turn: each held a moment, then dissolving into
+    // the next over the middle of the quarter turn
+    const q = Math.floor(this.crank);
+    const mix = smooth(Math.max(0, Math.min(1, (this.crank - q - 0.3) / 0.4)));
+    const a = ((q % 4) + 4) % 4;
+    const b = (a + 1) % 4;
+    if (mix < 0.01 || mix > 0.99) {
+      const f = mix < 0.01 ? a : b;
+      const sh = FRAMES[f].shaft;
+      ctx.drawImage(assets.popoOperating, (f % 2) * CELL.w, f > 1 ? CELL.h : 0, CELL.w, CELL.h,
+        this.axle.x - sh[0] * S, this.axle.y - sh[1] * S, CELL.w * S, CELL.h * S);
+    } else {
+      ctx.drawImage(this.blendPoses(a, b, mix), this.axle.x - BLEND.shaft[0] * S, this.axle.y - BLEND.shaft[1] * S, BLEND.w * S, BLEND.h * S);
+    }
     ctx.restore();
+  }
+
+  // Two poses mixed, shaft on shaft, each slid part of the way toward the other's face so the
+  // face moves on rather than doubling. Added together ('lighter') at weights that sum to one,
+  // the mix is solid wherever both are, so the raft never shows through the bear mid-dissolve.
+  blendPoses(a, b, mix) {
+    const c = this.poseBlend || (this.poseBlend = document.createElement('canvas'));
+    if (c.width !== BLEND.w) { c.width = BLEND.w; c.height = BLEND.h; }
+    const g = c.getContext('2d');
+    g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, BLEND.w, BLEND.h);
+    g.globalCompositeOperation = 'lighter';
+    const fa = FRAMES[a].face;
+    const fb = FRAMES[b].face;
+    const dx = (fb[0] - fa[0]) * FACE_FOLLOW;
+    const dy = (fb[1] - fa[1]) * FACE_FOLLOW;
+    for (const [f, alpha, sx, sy] of [[a, 1 - mix, dx * mix, dy * mix], [b, mix, -dx * (1 - mix), -dy * (1 - mix)]]) {
+      const sh = FRAMES[f].shaft;
+      g.globalAlpha = alpha;
+      g.drawImage(assets.popoOperating, (f % 2) * CELL.w, f > 1 ? CELL.h : 0, CELL.w, CELL.h,
+        BLEND.shaft[0] - sh[0] + sx, BLEND.shaft[1] - sh[1] + sy, CELL.w, CELL.h);
+    }
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    return c;
   }
 
   // --- rowing ---------------------------------------------------------------
