@@ -63,11 +63,11 @@ positions, animation logic, tests). This file is how they coordinate; the user r
    six golden or jewel-patterned fish, same size and style as the natural fish, facing right.
    They become the final level's prize school.
 4. Optional: smaller exports of `rope.png` (one twist, ~200 px wide) and the connector.
-5. **Popo cranking in-betweens**: `popo-operating.png` has four poses a turn, so Claude made the
-   three in-betweens of each quarter by optical flow (`tools/build-crank.py`,
-   `assets/sprites/popo-crank.webp`); where the paws cross the wheel they blur. Drawn frames would
-   be crisper: 16 poses round one turn of the wheel (grip at 12, then every 22.5°), same cell size
-   and shaft registration as the operating sheet, 4 × 4.
+5. **Popo cranking, more poses**: `popo-operating.png` has four poses a turn, which Popo plays
+   crisply at a steady 8.5 a second (in-betweens made by optical flow, or dissolves, ghosted where
+   the paws cross the wheel and the user rejected them). For a fluid turn, draw 12 or 16 poses
+   round one turn of the wheel (grip at 12 o'clock, then evenly round), same cell size, seat and
+   shaft registration as the operating sheet.
 
 ## Checking a change
 

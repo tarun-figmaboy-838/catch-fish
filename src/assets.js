@@ -69,9 +69,6 @@ async function loadCoreAssets() {
   assets.props = props;
   assets.naturalFish = { img: naturalFish, boxes: FISH_NATURAL_ATLAS.boxes, scale: FISH_NATURAL_ATLAS.scale };
   preloadBackground(1);
-  // Popo's sixteen-step crank (tools/build-crank.py) comes in the background; until then his
-  // four poses dissolve into each other
-  loadImage('assets/sprites/popo-crank.webp').then((img) => { assets.popoCrank = img; }, () => {});
   // the pause and final cards' panel (a CSS background) loads now, in the background, so the
   // first pause never shows a card without its frame
   loadImage('assets/generated/panel.png').catch(() => {});
